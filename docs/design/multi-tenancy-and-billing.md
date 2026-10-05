@@ -113,9 +113,30 @@ Each phase is additive and gated on proof the previous one actually holds before
 
 **Phase 0 — Schema & RLS (additive only).** Add the `organizations` table, seed one default org, add nullable `OrganizationId` to `Team`/`Engineer`/`Project`, backfill every row to it. No RLS or application behavior changes yet — the column exists but nothing reads it.
 
-**Phase 1 — App-layer checks.** Tighten the new columns to `NOT NULL`. Extend `RlsConnectionInterceptor` and the Postgres policy functions with `app.current_org_id`. Extend `ProjectAccessPolicy`. Introduce `ICurrentUserService` and point the load-bearing call sites at it.
+**Phase 1 — Org isolation.** Split into five independently shippable steps, because the audit at the start of Phase 1 found the isolation surface is wider than `ProjectAccessPolicy` and RLS alone (see *Phase 1 scope findings* below). Nothing is user-visible until Phase 2 creates a second org, so each step merges on its own.
 
-**Phase 2 — Multi-org live.** Add the `org_id` JWT claim. Build org creation and invite flows. This is the phase where a second organization's data first exists in production — everything before it is invisible plumbing.
+| Step | Scope |
+| --- | --- |
+| **1a — Org context** | `org_id` JWT claim (moved here from Phase 2: RLS needs it); `ICurrentUserService`; `HttpRlsContext` and `RlsConnectionInterceptor` stamp `app.current_org_id`; `app.current_org_id()` SQL function; `organization_id` tightened to `NOT NULL` |
+| **1b — Schema completion** | `OrganizationId` on org-wide config tables with no path to an org; per-org instead of global uniqueness |
+| **1c — Query scoping** | Org filter on every list/aggregate repository method; org check in `ProjectAccessPolicy`, including the global-role and department-head short-circuits; reports |
+| **1d — RLS backstop** | Org predicate in every RLS policy, and RLS on `engineers`/`teams` with an explicit service path for login |
+| **1e — Background jobs** | The recurring Hangfire jobs iterate per organization and use that org's thresholds |
+
+Alongside every step: a two-org isolation test suite (orgs A and B with overlapping role names), asserting org B sees none of org A's data. Each step extends it.
+
+**Phase 2 — Multi-org live.** Build org creation and invite flows; drop the `organization_id` column default and pass the creator's org into `Team`/`Engineer`/`Project.Create`. This is the phase where a second organization's data first exists in production — everything before it is invisible plumbing.
+
+### Phase 1 scope findings
+
+Recorded at the start of Phase 1 (Oct 5, 2026) from the code as it stood:
+
+- **List queries bypass `ProjectAccessPolicy`.** The policy answers "can this actor open resource X"; ~30 repository list methods (all active engineers, all projects, all teams, …) are unscoped and feed list pages and reports. `GlobalRoles` also return `true` before any lookup. Org isolation needs a filter at the query level, not only a policy check.
+- **Tables with no ownership chain to an org.** `threshold_settings`, `department_overwork_thresholds`, `alert_rules`, `alert_metric_snapshots`, `google_chat_spaces`, `audit_log`, `failed_emails` reach neither `Project` nor `Engineer`. They need their own `OrganizationId` (1b).
+- **Globally unique keys.** `teams.name`, `projects.code`, `engineers.email` and `google_chat_spaces.space_id` are unique app-wide. Team name and project code become per-org. **Decision (Oct 5, 2026): `engineers.email` stays globally unique — one account per email, belonging to exactly one org.** Login is unchanged (the email identifies the org); multi-org membership can be added later as its own feature.
+- **Background jobs.** Nine recurring Hangfire jobs run as the RLS `service` role across all data, using global thresholds.
+- **`engineers` and `teams` have no RLS.** Only projects, tasks, epics, wiki pages, sprints and task children do. Adding it to `engineers` touches the unauthenticated login path.
+- **Runtime DB role grants.** The runtime role (`pulse_rls_app`) is provisioned outside this repo, and `docs/rls-runbook.md` referenced by the README is missing. New tables rely on default privileges; confirm before 1c reads `organizations` at runtime.
 
 **Phase 3 — Billing.** `Plan` entity, provider webhook endpoint, seat metering, enforcement on plan limits (detailed in Billing model above).
 
