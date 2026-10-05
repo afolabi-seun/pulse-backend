@@ -68,7 +68,7 @@ Migration mechanics, in order:
 3. Extend `RlsConnectionInterceptor` to also stamp `app.current_org_id`; extend the Postgres functions from the RLS migrations (`app.can_access_project`, etc.) to additionally check `organization_id = app.current_org_id()` — directly on `teams`/`engineers`/`projects`, via a join through `project_id`/`engineer_id` everywhere else
 4. Extend `ProjectAccessPolicy`'s methods to also compare the resource's (inherited) `OrganizationId` against the actor's — same defense-in-depth pairing as the project-level checks today
 
-No `HasQueryFilter` is introduced even now — RLS remains the backstop and `ProjectAccessPolicy` the primary gate, consistent with the existing pattern, rather than adding a third enforcement point in EF Core.
+**Revised in Phase 1c (Oct 5, 2026): org scoping uses EF Core global query filters.** The original plan avoided `HasQueryFilter` on the assumption that `ProjectAccessPolicy` gates every read, but list queries never go through it (see *Phase 1 scope findings*). Filters on all 39 entity types (`PulseDbContext.OrganizationFilters.cs`) scope every query to the caller's org: directly where a table has `organization_id`, otherwise through its parent, with nested filters keeping each chain inside one org. They apply only to authenticated callers; background jobs and anonymous endpoints (login) are unfiltered until 1e. New rows an authenticated caller adds are stamped with the caller's org on `SaveChanges`. RLS (1d) remains the database backstop, and `ProjectAccessPolicy` still decides access *within* an org.
 
 ## Access & auth changes
 
@@ -137,8 +137,9 @@ Recorded at the start of Phase 1 (Oct 5, 2026) from the code as it stood:
 - **Mapping Google Chat spaces to an org.** A space is registered when the bot is added to it, from Google's callback, which carries no Pulse org. Phase 2 needs a way to link a space to the org that installed it.
 - **Globally unique keys.** `teams.name`, `projects.code`, `engineers.email` and `google_chat_spaces.space_id` are unique app-wide. Team name and project code become per-org. **Decision (Oct 5, 2026): `engineers.email` stays globally unique — one account per email, belonging to exactly one org.** Login is unchanged (the email identifies the org); multi-org membership can be added later as its own feature.
 - **Background jobs.** Nine recurring Hangfire jobs run as the RLS `service` role across all data, using global thresholds.
+- **In-memory thresholds were app-wide.** `OverworkThresholds` was a process-wide singleton, hydrated at startup and mutated in place on update, so one org's admin changing thresholds would have changed them for every org. Fixed in 1c: a per-org cache (`OrganizationThresholdsCache`) resolved per request, with `OverworkSignalsCalculator` now scoped.
 - **`engineers` and `teams` have no RLS.** Only projects, tasks, epics, wiki pages, sprints and task children do. Adding it to `engineers` touches the unauthenticated login path.
-- **Runtime DB role grants.** The runtime role (`pulse_rls_app`) is provisioned outside this repo, and `docs/rls-runbook.md` referenced by the README is missing. New tables rely on default privileges; confirm before 1c reads `organizations` at runtime.
+- **Runtime DB role grants — resolved.** `docs/rls-runtime-role.sql` (added in #6) grants `pulse_rls_app` default privileges on every table `pulse_owner` creates, so `organizations` and later tables are covered without per-migration grants. `app.current_org_id()` is executable by default (Postgres grants `EXECUTE` on functions to `PUBLIC`).
 
 **Phase 3 — Billing.** `Plan` entity, provider webhook endpoint, seat metering, enforcement on plan limits (detailed in Billing model above).
 

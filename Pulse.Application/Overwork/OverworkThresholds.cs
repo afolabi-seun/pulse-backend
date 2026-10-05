@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Pulse.Application.Overwork;
 
 public class PointScaleEntry
@@ -84,4 +86,46 @@ public class OverworkThresholds
         new() { Value = 4, Label = "High",     Criteria = "Committed for this cycle, on the critical path" },
         new() { Value = 5, Label = "Critical", Criteria = "Blocking another team, a customer, or production" },
     ];
+
+    /// <summary>Overwrites defaults with whatever an organization has saved in threshold_settings.
+    /// Unknown keys and unparseable values are ignored, leaving that threshold at its default.</summary>
+    public void Apply(IReadOnlyDictionary<string, string> settings)
+    {
+        if (settings.TryGetValue("LoadVsBaselineRatio", out var v1) && double.TryParse(v1, out var ratio))
+            LoadVsBaselineRatio = ratio;
+        if (settings.TryGetValue("MaxConcurrentTasks", out var v2) && int.TryParse(v2, out var concurrent))
+            MaxConcurrentTasks = concurrent;
+        if (settings.TryGetValue("StaleCycleMultiplier", out var v3) && double.TryParse(v3, out var stale))
+            StaleCycleMultiplier = stale;
+        if (settings.TryGetValue("SignalsRequiredToFlag", out var v4) && int.TryParse(v4, out var signals))
+            SignalsRequiredToFlag = signals;
+        if (settings.TryGetValue("EscalationT3Days", out var v5) && double.TryParse(v5, out var t3Days))
+            EscalationT3Days = t3Days;
+        if (settings.TryGetValue("EscalationT3ElapsedPct", out var v6) && double.TryParse(v6, out var t3Pct))
+            EscalationT3ElapsedPct = t3Pct;
+        if (settings.TryGetValue("EscalationT1Days", out var v7) && double.TryParse(v7, out var t1Days))
+            EscalationT1Days = t1Days;
+        if (settings.TryGetValue("EscalationT1ElapsedPct", out var v8) && double.TryParse(v8, out var t1Pct))
+            EscalationT1ElapsedPct = t1Pct;
+        if (settings.TryGetValue("EscalationT3MinHours", out var v9) && double.TryParse(v9, out var t3MinH))
+            EscalationT3MinHours = t3MinH;
+        if (settings.TryGetValue("EscalationT1MinHours", out var v10) && double.TryParse(v10, out var t1MinH))
+            EscalationT1MinHours = t1MinH;
+        if (settings.TryGetValue("QaLeadTimeDays", out var v11) && int.TryParse(v11, out var qaLead))
+            QaLeadTimeDays = qaLead;
+        if (settings.TryGetValue("PointScale", out var psJson) && !string.IsNullOrEmpty(psJson))
+        {
+            var entries = JsonSerializer.Deserialize<PointScaleEntry[]>(psJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (entries is { Length: > 0 })
+                PointScale = entries;
+        }
+        if (settings.TryGetValue("PriorityScale", out var prJson) && !string.IsNullOrEmpty(prJson))
+        {
+            var entries = JsonSerializer.Deserialize<PriorityScaleEntry[]>(prJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (entries is { Length: > 0 })
+                PriorityScale = entries;
+        }
+    }
 }
