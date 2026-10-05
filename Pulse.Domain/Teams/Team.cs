@@ -1,4 +1,5 @@
 using Pulse.Domain.Common;
+using Pulse.Domain.Organizations;
 
 namespace Pulse.Domain.Teams;
 
@@ -6,9 +7,9 @@ public class Team : Entity
 {
     public string Name { get; private set; } = string.Empty;
     public Guid? TeamLeadId { get; private set; }
-    /// <summary>Owning organization. Phase 0 of multi-tenancy: always the default org (set by the
-    /// column default when left null on insert), and not yet read anywhere.</summary>
-    public Guid? OrganizationId { get; private set; }
+    /// <summary>Owning organization. Always the default org until multi-tenancy Phase 2 passes the
+    /// creator's org into Create.</summary>
+    public Guid OrganizationId { get; private set; } = Organization.DefaultId;
     public bool IsActive { get; private set; } = true;
     /// <summary>Vertical this team belongs to — e.g. "Engineering", "Product", "Design", "PMO".</summary>
     public string? Department { get; private set; }

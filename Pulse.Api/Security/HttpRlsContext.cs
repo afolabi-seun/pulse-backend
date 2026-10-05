@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Pulse.Application.Common.Interfaces;
 
 namespace Pulse.Api.Security;
@@ -11,23 +10,28 @@ namespace Pulse.Api.Security;
 public class HttpRlsContext : IRlsContext
 {
     private readonly IHttpContextAccessor _http;
+    private readonly ICurrentUserService _currentUser;
 
-    public HttpRlsContext(IHttpContextAccessor http) => _http = http;
+    public HttpRlsContext(IHttpContextAccessor http, ICurrentUserService currentUser)
+    {
+        _http = http;
+        _currentUser = currentUser;
+    }
 
-    public (string Role, string UserId) Resolve()
+    public (string Role, string UserId, string OrganizationId) Resolve()
     {
         var ctx = _http.HttpContext;
         if (ctx is null)
-            return ("service", ""); // background work — no request in flight
+            return ("service", "", ""); // background work — no request in flight
 
         if (RlsServiceOverride.IsSet(ctx))
-            return ("service", ""); // narrow, explicit opt-in — see RlsServiceOverride
+            return ("service", "", ""); // narrow, explicit opt-in — see RlsServiceOverride
 
-        var user = ctx.User;
-        if (user.Identity?.IsAuthenticated == true)
-            return (user.FindFirstValue(ClaimTypes.Role) ?? "engineer",
-                    user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "");
+        if (_currentUser.IsAuthenticated)
+            return (_currentUser.Role ?? "engineer",
+                    _currentUser.UserId?.ToString() ?? "",
+                    _currentUser.OrganizationId?.ToString() ?? "");
 
-        return ("", ""); // unauthenticated request — only RLS-exempt tables (e.g. auth) are reachable
+        return ("", "", ""); // unauthenticated request — only RLS-exempt tables (e.g. auth) are reachable
     }
 }
