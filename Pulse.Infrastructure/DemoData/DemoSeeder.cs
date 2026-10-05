@@ -15,8 +15,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Pulse.Infrastructure.DemoData;
 
-public sealed class DemoSeeder(PulseDbContext db, IPasswordHasher hasher) : IDemoSeeder
+/// <summary>Wipes and reseeds the database. It owns its own context rather than borrowing the request's: resetting means
+/// <c>TRUNCATE ... RESTART IDENTITY</c>, which needs ownership of the sequences, so it runs on the owner (migration) connection
+/// — as the service identity, so row-level security does not hide any rows from it. The restricted runtime role that serves requests
+/// can then stay a plain non-owner, which is what makes row-level security apply to it.</summary>
+public sealed class DemoSeeder(PulseDbContext db, IPasswordHasher hasher) : IDemoSeeder, IDisposable
 {
+    public void Dispose() => db.Dispose();
+
     private const string DemoPassword = "Demo@12345!";
 
     private static readonly string TruncateSql = @"
