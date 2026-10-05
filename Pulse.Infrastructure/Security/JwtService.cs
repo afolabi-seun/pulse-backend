@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Pulse.Application.Auth;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Engineers;
 using Microsoft.IdentityModel.Tokens;
@@ -33,6 +34,7 @@ public class JwtService : IJwtService
             new Claim(JwtRegisteredClaimNames.Sub, engineer.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, engineer.Email),
             new Claim(ClaimTypes.Role, engineer.Role),
+            new Claim(PulseClaimTypes.OrganizationId, engineer.OrganizationId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

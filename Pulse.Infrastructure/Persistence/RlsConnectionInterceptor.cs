@@ -6,8 +6,8 @@ namespace Pulse.Infrastructure.Persistence;
 
 /// <summary>
 /// Stamps the current identity onto every database connection as session-level settings
-/// (<c>app.current_role</c> / <c>app.current_user_id</c>) so Postgres row-level security policies
-/// can see who is acting. Runs on every connection open — including pool check-outs — so a value
+/// (<c>app.current_role</c> / <c>app.current_user_id</c> / <c>app.current_org_id</c>) so Postgres
+/// row-level security policies can see who is acting, and for which organization. Runs on every connection open — including pool check-outs — so a value
 /// left by a previous caller is always overwritten before any query runs.
 /// </summary>
 /// <remarks>
@@ -35,10 +35,11 @@ public class RlsConnectionInterceptor : DbConnectionInterceptor
 
     private async Task ApplyAsync(DbConnection connection, CancellationToken ct)
     {
-        var (role, userId) = _rls.Resolve();
+        var (role, userId, orgId) = _rls.Resolve();
 
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "select set_config('app.current_role', @role, false), set_config('app.current_user_id', @uid, false)";
+        cmd.CommandText = "select set_config('app.current_role', @role, false), set_config('app.current_user_id', @uid, false), " +
+                          "set_config('app.current_org_id', @org, false)";
 
         var roleParam = cmd.CreateParameter();
         roleParam.ParameterName = "role";
@@ -49,6 +50,11 @@ public class RlsConnectionInterceptor : DbConnectionInterceptor
         uidParam.ParameterName = "uid";
         uidParam.Value = userId;
         cmd.Parameters.Add(uidParam);
+
+        var orgParam = cmd.CreateParameter();
+        orgParam.ParameterName = "org";
+        orgParam.Value = orgId;
+        cmd.Parameters.Add(orgParam);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
