@@ -9,7 +9,8 @@ public class DepartmentThresholdOverrideConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<DepartmentThresholdOverride> builder)
     {
         builder.ToTable("department_overwork_thresholds");
-        builder.HasKey(d => d.Department);
+        builder.HasKey(d => new { d.OrganizationId, d.Department });
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "department_overwork_thresholds", index: false);
         builder.Property(d => d.Department).HasColumnName("department").HasMaxLength(100).IsRequired();
         builder.Property(d => d.LoadVsBaselineRatio).HasColumnName("load_vs_baseline_ratio");
         builder.Property(d => d.MaxConcurrentTasks).HasColumnName("max_concurrent_tasks");

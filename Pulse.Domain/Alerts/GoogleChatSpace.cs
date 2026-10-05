@@ -1,4 +1,5 @@
 using Pulse.Domain.Common;
+using Pulse.Domain.Organizations;
 
 namespace Pulse.Domain.Alerts;
 
@@ -11,6 +12,9 @@ public class GoogleChatSpace : Entity
 {
     /// <summary>Google Chat's own resource name (e.g. "spaces/AAAAAAAAAAA") — opaque to a person,
     /// which is exactly why DisplayName exists for the UI to show instead.</summary>
+    /// <summary>Owning organization. Always the default org until multi-tenancy Phase 2 sets it from
+    /// the connecting org.</summary>
+    public Guid OrganizationId { get; private set; } = Organization.DefaultId;
     public string SpaceId { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
 

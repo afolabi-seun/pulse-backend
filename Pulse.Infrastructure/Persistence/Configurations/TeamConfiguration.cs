@@ -13,11 +13,12 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
         builder.Property(t => t.Id).HasColumnName("id");
         builder.Property(t => t.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
         builder.Property(t => t.TeamLeadId).HasColumnName("team_lead_id");
-        OrganizationConfiguration.ConfigureOrganizationId(builder, "teams");
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "teams", index: false);
         builder.Property(t => t.IsActive).HasColumnName("is_active").IsRequired();
         builder.Property(t => t.Department).HasColumnName("department").HasMaxLength(100);
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
 
-        builder.HasIndex(t => t.Name).IsUnique().HasDatabaseName("ix_teams_name");
+        // Unique per organization, not app-wide — two orgs can each have a "Platform" team.
+        builder.HasIndex(t => new { t.OrganizationId, t.Name }).IsUnique().HasDatabaseName("ux_teams_organization_id_name");
     }
 }
