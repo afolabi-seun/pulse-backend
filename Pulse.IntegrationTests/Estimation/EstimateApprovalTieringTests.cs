@@ -166,4 +166,41 @@ public class EstimateApprovalTieringTests : IntegrationTestBase, IClassFixture<P
             .Content.ReadFromJsonAsync<ApiResponse<EstimationDto>>(JsonOpts);
         leadViewAfter!.Data!.CanApprove.Should().BeTrue("escalation adds the head, it doesn't revoke the team lead");
     }
+
+    [Fact]
+    public async Task A_team_lead_who_submits_for_their_engineer_cannot_approve_or_reject_it_and_the_head_can()
+    {
+        var lead = await SeedEngineerAsync("tier_submitlead@cadence.io", Roles.TeamLead);
+        var team = await SeedTeamAsync("Submit Lead Team", lead.Id, "Engineering");
+        await AssignEngineerToTeamAsync(lead.Id, team.Id);
+        var head = await SeedEngineerAsync("tier_submithead@cadence.io", Roles.HeadOfRnD);
+        await AssignEngineerToTeamAsync(head.Id, team.Id);
+        var engineer = await SeedEngineerAsync("tier_submiteng@cadence.io", Roles.Engineer);
+        await AssignEngineerToTeamAsync(engineer.Id, team.Id);
+        var project = await SeedProjectAsync("Submit Lead Project", team.Id);
+        var task = await SeedTaskAsync("Lead submits for engineer", project.Id, points: 0, assigneeId: engineer.Id);
+
+        var leadClient = await AuthenticatedClientAsync("tier_submitlead@cadence.io");
+        var headClient = await AuthenticatedClientAsync("tier_submithead@cadence.io");
+
+        (await leadClient.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/estimation/vote", new { points = 5 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await leadClient.PostAsync($"/api/v1/tasks/{task.Id}/estimation/reveal", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        // The lead submits on the engineer's behalf — so the lead is the submitter, and the engineer's own first-line approver.
+        (await leadClient.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/estimation/submit-for-approval", new { points = 5 }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var leadView = await (await leadClient.GetAsync($"/api/v1/tasks/{task.Id}/estimation"))
+            .Content.ReadFromJsonAsync<ApiResponse<EstimationDto>>(JsonOpts);
+        leadView!.Data!.CanApprove.Should().BeFalse();
+        var headView = await (await headClient.GetAsync($"/api/v1/tasks/{task.Id}/estimation"))
+            .Content.ReadFromJsonAsync<ApiResponse<EstimationDto>>(JsonOpts);
+        headView!.Data!.CanApprove.Should().BeTrue("with the submitter out of the way the request goes to the department head");
+
+        (await leadClient.PostAsync($"/api/v1/tasks/{task.Id}/estimation/approve", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await leadClient.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/estimation/reject", new { reason = "mine" })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await headClient.PostAsync($"/api/v1/tasks/{task.Id}/estimation/approve", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await (await headClient.GetAsync($"/api/v1/tasks/{task.Id}")).Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts);
+        updated!.Data!.Points.Should().Be(5);
+    }
 }
