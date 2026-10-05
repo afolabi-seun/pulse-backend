@@ -10,58 +10,61 @@ using Hangfire;
 
 namespace Pulse.Infrastructure.BackgroundJobs;
 
+/// <summary>Recurring schedules. Every job runs once per organization through OrganizationJobRunner, which
+/// fans out one child job per active org; job ids and schedules are unchanged, so AddOrUpdate replaces the
+/// existing single-run entries in place.</summary>
 public static class HangfireJobRegistrar
 {
     public static void RegisterRecurringJobs(IRecurringJobManager manager)
     {
-        manager.AddOrUpdate<EscalationScanner>(
+        manager.AddOrUpdate<OrganizationJobRunner<EscalationScanner>>(
             "escalation-scanner",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "*/30 * * * *");
 
-        manager.AddOrUpdate<EstimateApprovalEscalationScanner>(
+        manager.AddOrUpdate<OrganizationJobRunner<EstimateApprovalEscalationScanner>>(
             "estimate-approval-escalation-scanner",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "*/30 * * * *");
 
-        manager.AddOrUpdate<AlertRuleScanner>(
+        manager.AddOrUpdate<OrganizationJobRunner<AlertRuleScanner>>(
             "alert-rule-scanner",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "*/30 * * * *");
 
-        manager.AddOrUpdate<AutomationRuleScanner>(
+        manager.AddOrUpdate<OrganizationJobRunner<AutomationRuleScanner>>(
             "automation-rule-scanner",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "*/30 * * * *");
 
         // 08:00 weekdays — morning reminder for engineers who haven't checked in yet
-        manager.AddOrUpdate<CheckInReminderJob>(
+        manager.AddOrUpdate<OrganizationJobRunner<CheckInReminderJob>>(
             "check-in-reminder",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 8 * * 1-5");
 
         // 18:00 weekdays — end-of-day nudge for engineers still missing a check-in
-        manager.AddOrUpdate<CheckInNudgeJob>(
+        manager.AddOrUpdate<OrganizationJobRunner<CheckInNudgeJob>>(
             "check-in-nudge",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 18 * * 1-5");
 
         // 09:00 every Friday — weekly vitals prompt
-        manager.AddOrUpdate<WeeklyVitalsPromptJob>(
+        manager.AddOrUpdate<OrganizationJobRunner<WeeklyVitalsPromptJob>>(
             "weekly-vitals-prompt",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 9 * * 5");
 
         // 09:00 weekdays — overwork digest to team leads (own team), PMs (org-wide), PMO (rolled-up count)
-        manager.AddOrUpdate<OverworkDigestJob>(
+        manager.AddOrUpdate<OrganizationJobRunner<OverworkDigestJob>>(
             "overwork-digest",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 9 * * 1-5");
 
         // 16:00 Friday — weekly reminder for eligible roles who haven't logged any hours this week
-        manager.AddOrUpdate<TimeEntryReminderJob>(
+        manager.AddOrUpdate<OrganizationJobRunner<TimeEntryReminderJob>>(
             "time-entry-reminder",
-            j => j.RunAsync(CancellationToken.None),
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 16 * * 5");
     }
 }

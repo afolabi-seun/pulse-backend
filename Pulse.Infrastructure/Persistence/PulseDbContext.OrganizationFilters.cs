@@ -29,15 +29,21 @@ namespace Pulse.Infrastructure.Persistence;
 /// stays inside one org — e.g. a comment is visible only if its task is, which is visible only if its
 /// project is in the caller's org.
 ///
-/// <see cref="CurrentOrganizationId"/> is null — no filtering, exactly today's behavior — when there's
-/// no authenticated caller: background jobs (scoped per org in Phase 1e), anonymous endpoints such as
-/// login, which must find an engineer by email before any org is known, and tests' seed helpers.
-/// An authenticated caller whose token somehow lacks an org fails closed (Guid.Empty matches nothing).
+/// <see cref="CurrentOrganizationId"/> is the authenticated caller's org, or the org a recurring job is
+/// running for (OrganizationJobRunner, Phase 1e). It's null — no filtering — for anonymous endpoints such
+/// as login, which must find an engineer by email before any org is known, for ad-hoc background jobs not
+/// run per org, and for tests' seed helpers. An authenticated caller whose token somehow lacks an org
+/// fails closed (Guid.Empty matches nothing).
 /// </summary>
 public partial class PulseDbContext
 {
     private Guid? CurrentOrganizationId =>
-        _currentUser is { IsAuthenticated: true } user ? user.OrganizationId ?? Guid.Empty : null;
+        _currentUser switch
+        {
+            null => null,
+            { IsAuthenticated: true } user => user.OrganizationId ?? Guid.Empty,
+            var user => user.OrganizationId, // background work run for one org (Phase 1e), else unscoped
+        };
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

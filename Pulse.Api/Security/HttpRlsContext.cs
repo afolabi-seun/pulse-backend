@@ -22,7 +22,9 @@ public class HttpRlsContext : IRlsContext
     {
         var ctx = _http.HttpContext;
         if (ctx is null)
-            return ("service", "", ""); // background work — no request in flight
+            // Background work — no request in flight. Bounded to an organization when OrganizationJobRunner
+            // is running it for one; otherwise unscoped, as ad-hoc jobs always were.
+            return ("service", "", _currentUser.OrganizationId?.ToString() ?? "");
 
         // An authenticated caller is always bounded to an organization at the database: their own, or
         // Guid.Empty — which matches no row — if the token carries none. An empty org means "no org
@@ -30,6 +32,9 @@ public class HttpRlsContext : IRlsContext
         var orgId = _currentUser.IsAuthenticated
             ? (_currentUser.OrganizationId ?? Guid.Empty).ToString()
             : "";
+
+        if (_currentUser.IsServiceCaller)
+            return ("service", "", ""); // service-to-service token: org-agnostic by design
 
         if (RlsServiceOverride.IsSet(ctx))
             return ("service", "", orgId); // narrow, explicit opt-in — see RlsServiceOverride; still org-bounded

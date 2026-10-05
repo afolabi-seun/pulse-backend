@@ -10,7 +10,7 @@ using Pulse.Domain.Teams;
 
 namespace Pulse.Application.Escalations;
 
-public class EscalationScanner
+public class EscalationScanner : IRecurringJob
 {
     private readonly ITaskRepository _tasks;
     private readonly IEscalationEventRepository _events;
