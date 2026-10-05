@@ -39,7 +39,7 @@ Minimum values to set in `.env` for local development:
 
 `appsettings.Development.json` is pre-configured to connect to `localhost:5432` with database `pulse_dev`. Adjust if your local Postgres differs.
 
-> **Production RLS (two database roles).** Row-level security only protects data when the request path connects as a **non-superuser** role. In production set `DB_CONNECTION` to the limited runtime role (`pulse_rls_app`, `NOSUPERUSER`/`NOBYPASSRLS`) and `DB_MIGRATION_CONNECTION` to the table owner (migrations + Hangfire). Locally a single owner connection is fine (it bypasses RLS). Provisioning + verification: `docs/rls-runbook.md`.
+> **Production RLS (two database roles).** Row-level security only protects data when the request path connects as a **non-superuser** role. In production set `DB_CONNECTION` to the limited runtime role (`pulse_rls_app`, `NOSUPERUSER`/`NOBYPASSRLS`) and `DB_MIGRATION_CONNECTION` to the table owner (migrations + Hangfire). Locally a single connection works, but RLS then filters nothing (a superuser or `BYPASSRLS` role is exempt), so the project's `docker-compose.yml` runs the same two-role split. Migrations and demo seeding identify as the `service` role so they see every row, and a server must run with `ASPNETCORE_ENVIRONMENT=Production`. Provisioning + verification: `docs/rls-runbook.md`.
 
 ---
 
