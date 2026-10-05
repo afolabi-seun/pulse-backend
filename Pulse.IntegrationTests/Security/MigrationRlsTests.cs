@@ -1,4 +1,4 @@
-using Pulse.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Pulse.Infrastructure.Persistence;
 using Pulse.IntegrationTests.Infrastructure;
 using FluentAssertions;
@@ -18,17 +18,12 @@ public class MigrationRlsTests : IntegrationTestBase, IClassFixture<PulseWebAppl
 {
     public MigrationRlsTests(PulseWebApplicationFactory factory) : base(factory) { }
 
-    private sealed class NoIdentity : IRlsContext
+    /// <param name="identity">The interceptor the migration context carries; null is how it used to run, with none.</param>
+    private async Task<int> UpdateAsRlsBoundRoleAsync(DbConnectionInterceptor? identity, Guid taskId, string newTitle)
     {
-        public (string Role, string UserId) Resolve() => (string.Empty, string.Empty);
-    }
-
-    private async Task<int> UpdateAsRlsBoundRoleAsync(IRlsContext identity, Guid taskId, string newTitle)
-    {
-        var options = new DbContextOptionsBuilder<PulseDbContext>()
-            .UseNpgsql(Factory.ConnectionString)
-            .AddInterceptors(new RlsConnectionInterceptor(identity))
-            .Options;
+        var builder = new DbContextOptionsBuilder<PulseDbContext>().UseNpgsql(Factory.ConnectionString);
+        if (identity is not null) builder.AddInterceptors(identity);
+        var options = builder.Options;
         await using var db = new PulseDbContext(options);
         await db.Database.OpenConnectionAsync();
 
@@ -56,7 +51,7 @@ public class MigrationRlsTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         var project = await SeedProjectAsync("Migration RLS no-identity project");
         var task = await SeedTaskAsync("Original title", project.Id);
 
-        var updated = await UpdateAsRlsBoundRoleAsync(new NoIdentity(), task.Id, "Changed");
+        var updated = await UpdateAsRlsBoundRoleAsync(null, task.Id, "Changed");
 
         updated.Should().Be(0);
     }
@@ -67,8 +62,29 @@ public class MigrationRlsTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         var project = await SeedProjectAsync("Migration RLS service project");
         var task = await SeedTaskAsync("Original title", project.Id);
 
-        var updated = await UpdateAsRlsBoundRoleAsync(new ServiceRlsContext(), task.Id, "Changed");
+        var updated = await UpdateAsRlsBoundRoleAsync(new ServiceIdentityConnectionInterceptor(), task.Id, "Changed");
 
         updated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task The_migration_identity_is_the_service_role_with_no_user_and_no_organization()
+    {
+        // Multi-tenant: a migration must see every organization, so it carries no organization of its own.
+        var options = new DbContextOptionsBuilder<PulseDbContext>()
+            .UseNpgsql(Factory.ConnectionString)
+            .AddInterceptors(new ServiceIdentityConnectionInterceptor())
+            .Options;
+        await using var db = new PulseDbContext(options);
+        await db.Database.OpenConnectionAsync();
+
+        await using var cmd = db.Database.GetDbConnection().CreateCommand();
+        cmd.CommandText = "select current_setting('app.current_role', true), current_setting('app.current_user_id', true), current_setting('app.current_org_id', true)";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        reader.GetString(0).Should().Be("service");
+        reader.GetString(1).Should().BeEmpty();
+        reader.GetString(2).Should().BeEmpty();
     }
 }

@@ -28,7 +28,7 @@ public static class ApplicationBuilderExtensions
         // (touches zero rows yet is recorded as applied) whenever the migration role does not bypass RLS.
         var migrationOptions = new DbContextOptionsBuilder<PulseDbContext>()
             .UseNpgsql(appSettings.MigrationConnectionString)
-            .AddInterceptors(new RlsConnectionInterceptor(new ServiceRlsContext()))
+            .AddInterceptors(new ServiceIdentityConnectionInterceptor())
             .Options;
         try
         {
