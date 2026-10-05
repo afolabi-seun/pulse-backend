@@ -9,6 +9,9 @@ public class Project : Entity
     public string? Description { get; private set; }
     public ProjectStatus Status { get; private set; } = ProjectStatus.Active;
     public Guid? OwnerTeamId { get; private set; }
+    /// <summary>Owning organization. Phase 0 of multi-tenancy: always the default org (set by the
+    /// column default when left null on insert), and not yet read anywhere.</summary>
+    public Guid? OrganizationId { get; private set; }
     /// <summary>Short, unique, uppercase key used as the prefix for every task's display ID in this
     /// project (e.g. "NOTIF" for task keys like NOTIF-011). Uniqueness is enforced by callers
     /// (ProjectCodeGenerator + a DB unique index) — this class only enforces the format.</summary>

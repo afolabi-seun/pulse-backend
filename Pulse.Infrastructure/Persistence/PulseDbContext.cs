@@ -9,6 +9,7 @@ using Pulse.Domain.Escalations;
 using Pulse.Domain.Feedback;
 using Pulse.Domain.Notifications;
 using Pulse.Domain.Overrides;
+using Pulse.Domain.Organizations;
 using Pulse.Domain.Projects;
 using Pulse.Domain.Vitals;
 using Pulse.Domain.Reports;
@@ -42,6 +43,7 @@ public class PulseDbContext : DbContext
     public DbSet<ThresholdSetting> ThresholdSettings => Set<ThresholdSetting>();
     public DbSet<DepartmentThresholdOverride> DepartmentThresholdOverrides => Set<DepartmentThresholdOverride>();
     public DbSet<Team> Teams => Set<Team>();
+    public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Sprint> Sprints => Set<Sprint>();
     public DbSet<TaskDependency> TaskDependencies => Set<TaskDependency>();
     public DbSet<Subtask> Subtasks => Set<Subtask>();
