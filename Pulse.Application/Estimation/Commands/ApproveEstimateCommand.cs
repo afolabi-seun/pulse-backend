@@ -45,7 +45,10 @@ public class ApproveEstimateHandler : IRequestHandler<ApproveEstimateCommand, Se
         if (task is null)
             return ServiceResult<Unit>.Fail("NOT_FOUND", "Task not found.");
 
-        if (!await EstimationApproval.IsAuthorizedAsync(task.AssigneeId, request.ActorId, request.ActorRole, session.EscalatedToHead, _engineers, _teams, ct))
+        if (request.ActorId == session.SubmittedBy)
+            return ServiceResult<Unit>.Fail("FORBIDDEN", "You submitted this estimate, so someone else has to approve it.");
+
+        if (!await EstimationApproval.IsAuthorizedAsync(task.AssigneeId, request.ActorId, request.ActorRole, session.EscalatedToHead, session.SubmittedBy, _engineers, _teams, ct))
             return ServiceResult<Unit>.Fail("FORBIDDEN", "Only the assignee's department head (or a Team Lead, if none is set up) can approve this estimate.");
 
         task.SetPoints(points, request.ActorId, reason: "Re-estimated with Planning Poker and approved");

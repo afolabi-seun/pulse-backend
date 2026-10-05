@@ -60,6 +60,9 @@ public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsync
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // The wipe-everything demo endpoints are opt-in on top of the Development environment (see DemoController).
+        builder.UseSetting("ENABLE_DEMO_ENDPOINTS", "true");
+
         builder.ConfigureServices(services =>
         {
             // Replace real DB context with Testcontainers connection

@@ -117,7 +117,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAutomationRuleRepository, AutomationRuleRepository>();
         services.AddScoped<IAutomationExecutionRepository, AutomationExecutionRepository>();
 
-        services.AddScoped<IDemoSeeder, DemoSeeder>();
+        // Resetting demo data truncates tables and restarts their sequences, which only the owner can do — so the seeder gets its own
+        // context on the owner (migration) connection, identifying as the service role. See DemoSeeder.
+        services.AddScoped<IDemoSeeder>(sp =>
+        {
+            var options = new DbContextOptionsBuilder<PulseDbContext>()
+                .UseNpgsql(sp.GetRequiredService<IAppSettings>().MigrationConnectionString)
+                .AddInterceptors(new ServiceIdentityConnectionInterceptor())
+                .Options;
+            return new DemoSeeder(new PulseDbContext(options), sp.GetRequiredService<IPasswordHasher>());
+        });
 
         return services;
     }
