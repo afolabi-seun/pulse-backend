@@ -22,8 +22,12 @@ public static class ApplicationBuilderExtensions
         // Migrations need the privileged (owner) connection — the runtime DbContext connects as the
         // limited, RLS-bound role which lacks DDL rights. Build a throwaway context for the migration.
         var appSettings = scope.ServiceProvider.GetRequiredService<Application.Common.Interfaces.IAppSettings>();
+        // The throwaway context has no HTTP request, so it must say who it is: as the service role, row-level
+        // security lets a data migration see every row. Without it a data-changing migration is silently filtered
+        // (touches zero rows yet is recorded as applied) whenever the migration role does not bypass RLS.
         var migrationOptions = new DbContextOptionsBuilder<PulseDbContext>()
             .UseNpgsql(appSettings.MigrationConnectionString)
+            .AddInterceptors(new RlsConnectionInterceptor(new ServiceRlsContext()))
             .Options;
         try
         {
