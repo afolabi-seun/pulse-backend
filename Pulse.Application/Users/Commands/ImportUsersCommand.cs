@@ -161,7 +161,18 @@ public class ImportUsersHandler : IRequestHandler<ImportUsersCommand, ServiceRes
         if (toCreate.Count == 0)
             return ServiceResult<ImportResult>.Ok(new ImportResult(0, failures));
 
-        await _engineers.SaveChangesAsync(ct);
+        try
+        {
+            await _engineers.SaveChangesAsync(ct);
+        }
+        catch (DuplicateEmailException)
+        {
+            // The duplicate check above only sees the caller's own organization. The batch saves atomically,
+            // so nothing was created.
+            return ServiceResult<ImportResult>.Fail("CONFLICT",
+                "One or more of these emails already belong to an account in another organization, so no users were imported. " +
+                "Remove those rows and try again.");
+        }
 
         foreach (var (engineer, rawToken) in toCreate)
         {

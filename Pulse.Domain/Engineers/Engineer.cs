@@ -27,12 +27,16 @@ public class Engineer : Entity
 
     private Engineer() { }
 
+    /// <param name="organizationId">The organization the engineer belongs to. Omitted by ordinary
+    /// creation inside a request — PulseDbContext stamps the caller's org on save — and set explicitly
+    /// only where there is no caller org to inherit, such as an operator creating a new org's first Head.</param>
     public static Engineer Create(string name, string email, string passwordHash, string role,
-        int baselinePoints, int baselineCycleDays)
+        int baselinePoints, int baselineCycleDays, Guid? organizationId = null)
     {
         ValidateBaseline(baselinePoints, baselineCycleDays);
         return new()
         {
+            OrganizationId = organizationId ?? Organization.DefaultId,
             Name = name,
             Email = email,
             PasswordHash = passwordHash,

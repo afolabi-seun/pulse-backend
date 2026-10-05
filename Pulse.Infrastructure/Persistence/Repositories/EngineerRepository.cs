@@ -1,8 +1,10 @@
 using System.Text;
+using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Pulse.Infrastructure.Persistence.Repositories;
 
@@ -134,6 +136,21 @@ public class EngineerRepository : IEngineerRepository
     public async Task AddAsync(Engineer engineer, CancellationToken ct = default) =>
         await _db.Engineers.AddAsync(engineer, ct);
 
-    public async Task SaveChangesAsync(CancellationToken ct = default) =>
-        await _db.SaveChangesAsync(ct);
+    public async Task SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ix_engineers_email" })
+        {
+            // Email is unique across organizations, but the caller's own lookups can't see other orgs.
+            var pending = _db.ChangeTracker.Entries<Engineer>()
+                .Where(e => e.State is EntityState.Added or EntityState.Modified)
+                .Select(e => e.Entity.Email)
+                .ToList();
+            throw new DuplicateEmailException(pending.Count == 1 ? pending[0] : null);
+        }
+    }
 }

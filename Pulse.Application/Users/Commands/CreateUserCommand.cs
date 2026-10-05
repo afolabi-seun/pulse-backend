@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Engineers;
@@ -59,8 +58,7 @@ public class CreateUserHandler : IRequestHandler<CreateUserCommand, ServiceResul
             return ServiceResult<UserDto>.Fail("CONFLICT", $"A user with email '{cmd.Email}' already exists.");
 
         // Random temporary password — user must reset on first login via the emailed link
-        var tempPassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var passwordHash = _hasher.Hash(tempPassword);
+        var passwordHash = ActivationInvite.UnusablePasswordHash(_hasher);
 
         var engineer = Engineer.Create(cmd.Name, cmd.Email, passwordHash, cmd.Role,
             cmd.BaselinePoints, cmd.BaselineCycleDays);
@@ -80,22 +78,20 @@ public class CreateUserHandler : IRequestHandler<CreateUserCommand, ServiceResul
             engineer.SetDiscipline(cmd.Discipline.Value);
 
         // Immediately set a reset token so the welcome email prompts a password set
-        var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var tokenHash = _jwt.HashToken(rawToken);
-        engineer.SetPasswordResetToken(tokenHash, DateTime.UtcNow.AddDays(_settings.ActivationTokenExpiryDays));
+        var rawToken = ActivationInvite.IssueToken(engineer, _jwt, _settings);
 
         await _engineers.AddAsync(engineer, ct);
-        await _engineers.SaveChangesAsync(ct);
+        try
+        {
+            await _engineers.SaveChangesAsync(ct);
+        }
+        catch (DuplicateEmailException)
+        {
+            // The check above only sees the caller's own organization; the email belongs to someone in another.
+            return ServiceResult<UserDto>.Fail("CONFLICT", $"A user with email '{cmd.Email}' already exists.");
+        }
 
-        var activationLink = $"{_settings.AppBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
-        var body = $"""
-            <p>Hi {cmd.Name},</p>
-            <p>You've been invited to <strong>Pulse</strong> — an engineering team management platform that helps track tasks, sprints, check-ins, and team capacity.</p>
-            <p>Click the button below to set your password and access your account:</p>
-            {EmailTemplate.Button(activationLink, "Accept invitation")}
-            {EmailTemplate.Muted($"This link expires in {_settings.ActivationTokenExpiryDays} day(s). If you were not expecting this invitation, you can safely ignore this email.")}
-            """;
-        _emailQueue.Enqueue(cmd.Email, "You've been invited to Pulse", EmailTemplate.Layout(body));
+        ActivationInvite.Send(_emailQueue, _settings, cmd.Name, cmd.Email, rawToken);
 
         await _audit.LogAsync("USER_CREATED", cmd.ActorId, cmd.IpAddress,
             $"Created user {engineer.Id} ({cmd.Email}) with role {cmd.Role}", ct);

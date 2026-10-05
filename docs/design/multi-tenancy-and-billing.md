@@ -125,7 +125,18 @@ Each phase is additive and gated on proof the previous one actually holds before
 
 Alongside every step: a two-org isolation test suite (orgs A and B with overlapping role names), asserting org B sees none of org A's data. Each step extends it.
 
-**Phase 2 — Multi-org live.** Build org creation and invite flows; drop the `organization_id` column default and pass the creator's org into `Team`/`Engineer`/`Project.Create`. This is the phase where a second organization's data first exists in production — everything before it is invisible plumbing.
+**Phase 2 — Multi-org live.** This is the phase where a second organization's data first exists in production; everything before it is invisible plumbing. Decisions (Oct 6, 2026):
+
+- **The operator creates organizations.** There's no public self-serve sign-up yet. Early orgs are onboarded by hand; self-serve can follow with billing.
+- **Each org connects its own Slack and Google Chat** in this phase, instead of sharing the deployment's credentials.
+
+| Step | Scope |
+| --- | --- |
+| **2a — Org creation** | `POST /api/v1/operator/organizations` behind `OPERATOR_API_KEY` (404 when unset, constant-time key check) creates an org and invites its first Head through the existing activation-link flow. `GET /api/v1/organization` returns the caller's org for the UI. Invites need nothing new: since 1c, a user created by an org's Head lands in that org. Cross-org duplicate emails return 409 instead of 500. Slack and Google Chat delivery are limited to the default org until 2b and 2c. |
+| **2b — Per-org Slack** | "Add to Slack" OAuth install per org, encrypted bot token per org, incoming events matched to an org by workspace (`team_id`), alert delivery and replies through the org's own workspace |
+| **2c — Per-org Google Chat** | One Chat app for every Workspace. Each space is linked to an org (an admin issues a one-time code in Pulse and types `@Pulse link <code>` in the space); events and alerts route by space |
+
+The `organization_id` column default stays until creation paths no longer depend on it. Ordinary creation inherits the caller's org through `PulseDbContext`'s save-time stamping, and the operator path sets the org explicitly (`Engineer.Create(..., organizationId)`).
 
 ### Phase 1 scope findings
 
