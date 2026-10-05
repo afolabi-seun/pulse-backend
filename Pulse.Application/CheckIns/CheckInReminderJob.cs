@@ -6,7 +6,7 @@ namespace Pulse.Application.CheckIns;
 /// <summary>
 /// Morning reminder (08:00) — emails engineers who have not yet submitted today's check-in.
 /// </summary>
-public class CheckInReminderJob
+public class CheckInReminderJob : IRecurringJob
 {
     private readonly ICheckInRepository _checkIns;
     private readonly IEngineerRepository _engineers;

@@ -11,7 +11,7 @@ namespace Pulse.Application.Alerts;
 /// whether a rule has "fired" — AlertMetricsProvider only reports numbers, this class is the sole
 /// place that compares a number to a threshold and reacts. Firing only ever sends a notification;
 /// it never mutates a task, team, or project.</summary>
-public class AlertRuleScanner
+public class AlertRuleScanner : IRecurringJob
 {
     private readonly IAlertRuleRepository _rules;
     private readonly IAlertMetricsProvider _metrics;

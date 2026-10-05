@@ -12,7 +12,7 @@ namespace Pulse.Application.Estimation;
 /// elapsed and escalates them to also include the department head — a backstop, not a handoff:
 /// the Team Lead keeps the ability to act afterward. Runs on the same pulse as the due-date
 /// EscalationScanner. See docs/planning-poker-approval-tiers-spec.md.</summary>
-public class EstimateApprovalEscalationScanner
+public class EstimateApprovalEscalationScanner : IRecurringJob
 {
     private readonly IEstimationRepository _estimation;
     private readonly ITaskRepository _tasks;

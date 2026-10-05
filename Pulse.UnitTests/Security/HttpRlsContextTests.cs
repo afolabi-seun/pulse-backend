@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Pulse.Api.Security;
 using Pulse.Application.Auth;
+using Pulse.Application.Common.Interfaces;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Moq;
@@ -11,7 +12,10 @@ public class HttpRlsContextTests
 {
     private readonly Mock<IHttpContextAccessor> _accessor = new();
 
-    private HttpRlsContext CreateContext() => new(_accessor.Object, new CurrentUserService(_accessor.Object));
+    private readonly BackgroundOrganizationContext _background = new();
+
+    private HttpRlsContext CreateContext() =>
+        new(_accessor.Object, new CurrentUserService(_accessor.Object, _background));
 
     [Fact]
     public void Resolve_returns_service_when_there_is_no_ambient_HttpContext()
@@ -116,5 +120,31 @@ public class HttpRlsContextTests
         role.Should().Be("service");
         userId.Should().Be("");
         resolvedOrg.Should().Be(orgId.ToString(), "the override lifts project-level RLS, not the organization boundary");
+    }
+
+    [Fact]
+    public void Background_work_run_for_an_organization_is_stamped_with_it()
+    {
+        var orgId = Guid.NewGuid();
+        _background.OrganizationId = orgId;
+        _accessor.Setup(a => a.HttpContext).Returns((HttpContext?)null);
+
+        var (role, userId, resolvedOrg) = CreateContext().Resolve();
+
+        role.Should().Be("service");
+        userId.Should().Be("");
+        resolvedOrg.Should().Be(orgId.ToString());
+    }
+
+    [Fact]
+    public void A_service_token_resolves_to_the_org_agnostic_service_role()
+    {
+        _accessor.Setup(a => a.HttpContext).Returns(AuthenticatedContext(new Claim("serviceId", "scheduler")));
+
+        var (role, userId, orgId) = CreateContext().Resolve();
+
+        role.Should().Be("service");
+        userId.Should().Be("");
+        orgId.Should().Be("");
     }
 }

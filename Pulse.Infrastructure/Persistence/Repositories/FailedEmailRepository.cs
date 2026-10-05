@@ -12,7 +12,18 @@ public class FailedEmailRepository : IFailedEmailRepository
 
     public async Task AddAsync(FailedEmail email, CancellationToken ct = default)
     {
+        // A failed email belongs to its recipient's organization, so it's listed to that org's heads.
+        // SendEmailJob runs later with no organization of its own, so look the recipient up; an address
+        // that isn't an engineer keeps the entity's default. (Inside an org's request or job, SaveChanges
+        // stamps that org instead — the recipient's own, in practice.)
+        var recipientOrg = await _db.Engineers
+            .Where(e => e.Email.ToLower() == email.To.ToLower())
+            .Select(e => (Guid?)e.OrganizationId)
+            .FirstOrDefaultAsync(ct);
+
         _db.FailedEmails.Add(email);
+        if (recipientOrg is Guid orgId)
+            _db.Entry(email).Property(e => e.OrganizationId).CurrentValue = orgId;
         await _db.SaveChangesAsync(ct);
     }
 
