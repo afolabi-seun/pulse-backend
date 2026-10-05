@@ -380,6 +380,14 @@ public static class ServiceCollectionExtensions
             options.GlobalLimiter = PulseRateLimits.CreateGlobalLimiter();
         });
 
+        // A local end-to-end run logs in from one address dozens of times and would trip the login limit. The limiter can be switched off, but
+        // only in Development and only when asked for (DISABLE_RATE_LIMITING=true): a server must never have it off.
+        services.AddOptions<RateLimiterOptions>().Configure<IConfiguration, IHostEnvironment>((options, config, env) =>
+        {
+            if (env.IsDevelopment() && config.GetValue<bool>("DISABLE_RATE_LIMITING"))
+                options.GlobalLimiter = null;
+        });
+
         return services;
     }
 }
