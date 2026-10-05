@@ -23,8 +23,11 @@ public static class PmoReportCsvRenderer
         sb.AppendLine();
 
         // ── Team Utilization ──────────────────────────────────────────────────
+        // Column set mirrors EngineerUtilizationTable.tsx (the shared on-screen table) so the
+        // export isn't missing fields a reader just saw on screen — In QA is split into Tasks/Points
+        // (rather than the UI's combined "1 (3 pts)") since a CSV cell is for machine parsing.
         AppendLine(sb, "=== TEAM UTILIZATION ===");
-        AppendLine(sb, "Team,Engineer,Role,Active Tasks,Points,Baseline,Load %,Check-ins This Week,Overworked,Blockers,Hours This Week");
+        AppendLine(sb, "Team,Engineer,Role,Active Tasks,Points,Due This Cycle,In QA Tasks,In QA Points,Baseline,Load %,Blockers,Check-ins This Week,Completed,Subtasks Done,Overworked,Hours This Week");
         foreach (var team in report.Teams)
         {
             foreach (var eng in team.Engineers)
@@ -34,8 +37,9 @@ public static class PmoReportCsvRenderer
                     : 0;
                 AppendLine(sb,
                     $"{Escape(team.TeamName)},{Escape(eng.Name)},{Escape(eng.Role)}," +
-                    $"{eng.ActiveTasks},{eng.TotalPoints},{eng.BaselinePoints}," +
-                    $"{loadPct},{eng.CheckInsThisWeek},{(eng.IsOverworked ? "Yes" : "No")},{eng.Blockers},{eng.HoursLoggedThisWeek}");
+                    $"{eng.ActiveTasks},{eng.TotalPoints},{eng.CyclePoints},{eng.TasksInQa},{eng.PointsInQa},{eng.BaselinePoints}," +
+                    $"{loadPct},{eng.Blockers},{eng.CheckInsThisWeek},{eng.CompletedTasks},{eng.SubtasksCompleted}," +
+                    $"{(eng.IsOverworked ? "Yes" : "No")},{eng.HoursLoggedThisWeek}");
             }
         }
         sb.AppendLine();
