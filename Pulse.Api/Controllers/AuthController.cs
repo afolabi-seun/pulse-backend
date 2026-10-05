@@ -20,14 +20,16 @@ namespace Pulse.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly bool _secureCookie;
+    private readonly bool _isDevelopment;
 
-    // The refresh cookie is Secure everywhere except local development, where the API is served over plain http.
     public AuthController(IMediator mediator, IHostEnvironment env)
     {
         _mediator = mediator;
-        _secureCookie = !env.IsDevelopment();
+        _isDevelopment = env.IsDevelopment();
     }
+
+    // Secure everywhere except local development, where the API is served over plain http (see RefreshTokenCookie.UseSecure).
+    private bool _secureCookie => RefreshTokenCookie.UseSecure(Request, _isDevelopment);
 
     // ── Request records ────────────────────────────────────────────────────────
 

@@ -31,6 +31,17 @@ public static class RefreshTokenCookie
 
     public static bool HasClientHeader(HttpRequest request) => request.Headers.ContainsKey(ClientHeader);
 
+    /// <summary>Whether the cookie should carry the Secure attribute. Always, except for a local development setup: a
+    /// Development environment talking to a loopback origin (or none). A server wrongly left in Development but serving a
+    /// real https frontend still gets a Secure cookie.</summary>
+    public static bool UseSecure(HttpRequest request, bool isDevelopment)
+    {
+        if (!isDevelopment) return true;
+        var origin = request.Headers.Origin.ToString();
+        if (string.IsNullOrEmpty(origin)) return false;
+        return !(Uri.TryCreate(origin, UriKind.Absolute, out var uri) && uri.IsLoopback);
+    }
+
     private static CookieOptions Options(bool secure, DateTimeOffset? expires) => new()
     {
         HttpOnly = true,
