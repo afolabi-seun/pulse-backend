@@ -83,7 +83,7 @@ public class HttpRlsContextTests
     }
 
     [Fact]
-    public void Resolve_returns_an_empty_organization_for_a_token_issued_before_the_org_claim_existed()
+    public void Resolve_fails_closed_for_an_authenticated_token_without_an_organization()
     {
         var userId = Guid.NewGuid().ToString();
         _accessor.Setup(a => a.HttpContext).Returns(AuthenticatedContext(
@@ -94,9 +94,27 @@ public class HttpRlsContextTests
 
         role.Should().Be("engineer");
         resolvedId.Should().Be(userId);
-        orgId.Should().Be("");
+        orgId.Should().Be(Guid.Empty.ToString(), "an authenticated caller with no org must match no organization, not all of them");
     }
 
     private static DefaultHttpContext AuthenticatedContext(params Claim[] claims) =>
         new() { User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "Test")) };
+
+    [Fact]
+    public void The_service_override_keeps_an_authenticated_callers_organization()
+    {
+        var orgId = Guid.NewGuid();
+        var ctx = AuthenticatedContext(
+            new Claim(ClaimTypes.Role, "engineer"),
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(PulseClaimTypes.OrganizationId, orgId.ToString()));
+        RlsServiceOverride.Apply(ctx);
+        _accessor.Setup(a => a.HttpContext).Returns(ctx);
+
+        var (role, userId, resolvedOrg) = CreateContext().Resolve();
+
+        role.Should().Be("service");
+        userId.Should().Be("");
+        resolvedOrg.Should().Be(orgId.ToString(), "the override lifts project-level RLS, not the organization boundary");
+    }
 }
