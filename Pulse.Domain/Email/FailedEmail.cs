@@ -1,9 +1,13 @@
 using Pulse.Domain.Common;
+using Pulse.Domain.Organizations;
 
 namespace Pulse.Domain.Email;
 
 public class FailedEmail : Entity
 {
+    /// <summary>The recipient's organization — failed emails are listed to that org's heads only.
+    /// Always the default org until multi-tenancy Phase 1c sets it from the recipient.</summary>
+    public Guid OrganizationId { get; private set; } = Organization.DefaultId;
     public string To { get; private set; } = string.Empty;
     public string Subject { get; private set; } = string.Empty;
     public string HtmlBody { get; private set; } = string.Empty;

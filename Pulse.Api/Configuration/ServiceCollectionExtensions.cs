@@ -206,8 +206,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<WeeklyVitalsPromptJob>();
         services.AddScoped<SendEmailJob>();
         services.AddScoped<OverworkDigestJob>();
-        services.AddSingleton(new OverworkThresholds());
-        services.AddSingleton<OverworkSignalsCalculator>();
+        // Thresholds are per organization: a singleton cache, resolved per request for the caller's org.
+        services.AddSingleton<OrganizationThresholdsCache>();
+        services.AddScoped<OrganizationThresholdsProvider>();
+        services.AddScoped(sp => sp.GetRequiredService<OrganizationThresholdsProvider>().ForCurrentOrganization());
+        services.AddScoped<OverworkSignalsCalculator>();
         services.AddScoped<EngineerWorkloadAssessor>();
 
         return services;

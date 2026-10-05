@@ -19,12 +19,13 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.Property(p => p.OwnerTeamId).HasColumnName("owner_team_id");
-        OrganizationConfiguration.ConfigureOrganizationId(builder, "projects");
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "projects", index: false);
         builder.Property(p => p.PersonalOwnerId).HasColumnName("personal_owner_id");
         // At most one personal project per person.
         builder.HasIndex(p => p.PersonalOwnerId).IsUnique()
             .HasFilter("personal_owner_id is not null").HasDatabaseName("ux_projects_personal_owner_id");
         builder.HasIndex(p => p.Status).HasDatabaseName("ix_projects_status");
-        builder.HasIndex(p => p.Code).IsUnique().HasDatabaseName("ux_projects_code");
+        // Unique per organization, not app-wide — two orgs can each have an "ENG" project.
+        builder.HasIndex(p => new { p.OrganizationId, p.Code }).IsUnique().HasDatabaseName("ux_projects_organization_id_code");
     }
 }
