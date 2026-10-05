@@ -8,12 +8,17 @@ namespace Pulse.Infrastructure.Persistence.Repositories;
 public class DepartmentThresholdRepository : IDepartmentThresholdRepository
 {
     private readonly PulseDbContext _db;
+    private readonly ICurrentUserService _currentUser;
 
-    public DepartmentThresholdRepository(PulseDbContext db) => _db = db;
+    public DepartmentThresholdRepository(PulseDbContext db, ICurrentUserService currentUser)
+    {
+        _db = db;
+        _currentUser = currentUser;
+    }
 
-    // Overrides are keyed per organization. Until multi-tenancy Phase 1c passes the caller's org in,
-    // every read and write is explicitly the default org's — the only org that exists.
-    private static readonly Guid OrganizationId = Organization.DefaultId;
+    // Overrides are keyed per organization: the caller's. Background jobs have no caller and use the
+    // default org's overrides until multi-tenancy Phase 1e runs them per organization.
+    private Guid OrganizationId => _currentUser.OrganizationId ?? Organization.DefaultId;
 
     public async Task<IReadOnlyList<DepartmentThresholdOverride>> GetAllAsync(CancellationToken ct = default) =>
         await _db.DepartmentThresholdOverrides
