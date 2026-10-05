@@ -7,6 +7,6 @@ public class LogoutRequestValidator : AbstractValidator<AuthController.LogoutReq
 {
     public LogoutRequestValidator()
     {
-        RuleFor(x => x.RefreshToken).NotEmpty();
+        RuleFor(x => x.RefreshToken).NotEmpty().When(x => x.RefreshToken is not null);
     }
 }
