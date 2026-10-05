@@ -23,7 +23,9 @@ public static class LeadershipReportPdfRenderer
         {
             container.Page(page =>
             {
-                page.Size(PageSizes.A4);
+                // Landscape: the Team Capacity table now carries the full engineer column set
+                // (parity with the PMO CSV export), which doesn't breathe in A4 portrait's width.
+                page.Size(PageSizes.A4.Landscape());
                 page.Margin(30);
                 page.DefaultTextStyle(t => t.FontSize(9).FontFamily("Arial"));
 
@@ -101,32 +103,64 @@ public static class LeadershipReportPdfRenderer
                 cols.RelativeColumn(3); // name
                 cols.RelativeColumn();  // tasks
                 cols.RelativeColumn();  // points
+                cols.RelativeColumn();  // due this cycle
+                cols.RelativeColumn();  // in qa tasks
+                cols.RelativeColumn();  // in qa points
                 cols.RelativeColumn();  // baseline
+                cols.RelativeColumn();  // load %
+                cols.RelativeColumn();  // completed
+                cols.RelativeColumn();  // subtasks done
                 cols.RelativeColumn();  // check-ins
-                cols.RelativeColumn();  // blockers
-                cols.RelativeColumn();  // flag
+                cols.RelativeColumn();     // blockers
+                cols.RelativeColumn(1.6f); // flag — "overworked" needs more room than a number column
             });
 
             HeaderCell(table, "Engineer");
             HeaderCell(table, "Tasks");
             HeaderCell(table, "Points");
+            HeaderCell(table, "Due/Cycle");
+            HeaderCell(table, "QA Tasks");
+            HeaderCell(table, "QA Pts");
             HeaderCell(table, "Baseline");
+            HeaderCell(table, "Load %");
+            HeaderCell(table, "Completed");
+            HeaderCell(table, "Subtasks");
             HeaderCell(table, "Check-ins");
             HeaderCell(table, "Blockers");
             HeaderCell(table, "Flag");
 
             foreach (var eng in engineers)
             {
+                // Same formula and thresholds as EngineerUtilizationTable.tsx's loadColor(), so a
+                // reader who has seen the on-screen table isn't met with a different number here.
+                var loadPct = eng.BaselinePoints > 0
+                    ? (int)Math.Round((double)eng.TotalPoints / eng.BaselinePoints * 100)
+                    : 0;
+                string? dueCycleColor = null;
+                if (eng.IsOverworked) dueCycleColor = Colors.Red.Darken2;
+
                 DataCell(table, eng.Name, bold: true);
                 DataCell(table, eng.ActiveTasks.ToString());
                 DataCell(table, eng.TotalPoints.ToString());
+                DataCell(table, eng.CyclePoints.ToString(), color: dueCycleColor);
+                DataCell(table, eng.TasksInQa.ToString());
+                DataCell(table, eng.PointsInQa.ToString());
                 DataCell(table, eng.BaselinePoints.ToString(), color: Colors.Grey.Darken1);
+                DataCell(table, $"{loadPct}%", bold: loadPct > 100, color: LoadColor(loadPct));
+                DataCell(table, eng.CompletedTasks.ToString());
+                DataCell(table, eng.SubtasksCompleted.ToString());
                 DataCell(table, $"{eng.CheckInsThisWeek}/5");
                 DataCell(table, eng.Blockers.ToString());
                 table.Cell().Padding(4).Text(eng.IsOverworked ? "⚠ overworked" : "")
                     .FontColor(eng.IsOverworked ? Colors.Red.Darken2 : Colors.White);
             }
         });
+
+    /// <summary>Mirrors EngineerUtilizationTable.tsx's loadColor() thresholds.</summary>
+    private static string LoadColor(int pct) =>
+        pct > 100 ? Colors.Red.Darken2 :
+        pct >= 80 ? Colors.Orange.Darken2 :
+        Colors.Green.Darken2;
 
     private static Action<IContainer> EscalationsTable(IReadOnlyList<EscalationReportEntry> escalations) =>
         c => c.Table(table =>
