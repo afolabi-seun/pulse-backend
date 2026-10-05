@@ -24,13 +24,18 @@ public class HttpRlsContext : IRlsContext
         if (ctx is null)
             return ("service", "", ""); // background work — no request in flight
 
+        // An authenticated caller is always bounded to an organization at the database: their own, or
+        // Guid.Empty — which matches no row — if the token carries none. An empty org means "no org
+        // boundary" to app.org_visible(), which is only right for background work and anonymous requests.
+        var orgId = _currentUser.IsAuthenticated
+            ? (_currentUser.OrganizationId ?? Guid.Empty).ToString()
+            : "";
+
         if (RlsServiceOverride.IsSet(ctx))
-            return ("service", "", ""); // narrow, explicit opt-in — see RlsServiceOverride
+            return ("service", "", orgId); // narrow, explicit opt-in — see RlsServiceOverride; still org-bounded
 
         if (_currentUser.IsAuthenticated)
-            return (_currentUser.Role ?? "engineer",
-                    _currentUser.UserId?.ToString() ?? "",
-                    _currentUser.OrganizationId?.ToString() ?? "");
+            return (_currentUser.Role ?? "engineer", _currentUser.UserId?.ToString() ?? "", orgId);
 
         return ("", "", ""); // unauthenticated request — only RLS-exempt tables (e.g. auth) are reachable
     }
