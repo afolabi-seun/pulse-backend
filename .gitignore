@@ -1,0 +1,54 @@
+# ── Build output ──────────────────────────────────────────────────────────────
+bin/
+obj/
+out/
+publish/
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+Pulse.Api/.env
+
+# ── NuGet ─────────────────────────────────────────────────────────────────────
+*.nupkg
+*.snupkg
+packages/
+!**/packages/repositories.config
+.nuget/
+
+# ── Test results & coverage ───────────────────────────────────────────────────
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+coverage.xml
+*.trx
+
+# ── EF Core design-time ───────────────────────────────────────────────────────
+*.sqlite
+
+# ── Certificates & keys ───────────────────────────────────────────────────────
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+*.user
+*.suo
+*.sln.docstates
+.vs/
+.idea/
+*.sln.iml
+.vscode/launch.json
+.vscode/*.env
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+._*
+Thumbs.db
+desktop.ini
