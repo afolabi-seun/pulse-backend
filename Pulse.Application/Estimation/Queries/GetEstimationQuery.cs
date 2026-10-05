@@ -58,11 +58,11 @@ public class GetEstimationHandler : IRequestHandler<GetEstimationQuery, ServiceR
             }
 
             var task = await _tasks.GetByIdAsync(request.TaskId, ct);
-            var state = await EstimationApproval.ResolveApproversAsync(task?.AssigneeId, session.EscalatedToHead, _engineers, _teams, ct);
+            var state = await EstimationApproval.ResolveApproversAsync(task?.AssigneeId, session.EscalatedToHead, session.SubmittedBy, _engineers, _teams, ct);
             approverNames = state?.Approvers.Select(a => a.Name).ToList();
-            canApprove = state is null || state.Approvers.Count == 0
+            canApprove = request.ActorId != session.SubmittedBy && (state is null || state.Approvers.Count == 0
                 ? CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(request.ActorRole)
-                : state.Approvers.Any(a => a.Id == request.ActorId);
+                : state.Approvers.Any(a => a.Id == request.ActorId));
         }
 
         return ServiceResult<EstimationDto>.Ok(new EstimationDto(

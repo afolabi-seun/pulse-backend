@@ -7,6 +7,7 @@ public class RefreshTokenRequestValidator : AbstractValidator<AuthController.Ref
 {
     public RefreshTokenRequestValidator()
     {
-        RuleFor(x => x.RefreshToken).NotEmpty();
+        // Optional: leaving it out means "use the cookie". A token that is sent must not be blank.
+        RuleFor(x => x.RefreshToken).NotEmpty().When(x => x.RefreshToken is not null);
     }
 }

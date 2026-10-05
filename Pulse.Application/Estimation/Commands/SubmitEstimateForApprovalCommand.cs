@@ -85,7 +85,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
         // A fresh submission is never pre-escalated (SubmitForApproval resets the flag) — always
         // resolves to whoever the first tier actually is (Team Lead, or straight to the head(s)
         // per EstimationApproval's own rules).
-        var state = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: false, _engineers, _teams, ct);
+        var state = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: false, request.ActorId, _engineers, _teams, ct);
         // No one resolvable at all (no assignee, or assignee has neither a Team Lead nor a
         // department head) — ApproveEstimateCommand falls back to allowing Team Lead+ in that
         // case, so there's no one specific to notify here beyond what the existing task-update
