@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using Pulse.Api.Attributes;
 using Pulse.Api.Authorization;
+using Pulse.Api.Reports;
 using Pulse.Application.Auth;
 using Pulse.Api.Common;
 using Pulse.Application.CheckIns;
@@ -104,6 +105,25 @@ public class CheckInsController : ControllerBase
     public async Task<IActionResult> GetStandupSummary(
         [FromQuery] Guid? teamId, [FromQuery] DateOnly? date, [FromQuery] int limit = 25, [FromQuery] string? cursor = null) =>
         (await _mediator.Send(new GetStandupSummaryQuery(teamId, date, GetRole(), GetActorId(), limit, cursor))).ToActionResult();
+
+    /// <summary>Downloads the standup digest for a given day as a detailed CSV file.</summary>
+    /// <remarks>Same access and scoping as the JSON endpoint above. Every check-in for the day is
+    /// included (no pagination), plus a section listing who hasn't checked in.</remarks>
+    [HttpGet("standup/csv")]
+    [RequiresCapability(CapabilityRegistry.TeamLeadOrAbove, CapabilityRegistry.ExecutiveRead, CapabilityRegistry.HrRead, CapabilityRegistry.AccountantRead)]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetStandupSummaryCsv([FromQuery] Guid? teamId, [FromQuery] DateOnly? date)
+    {
+        var result = await _mediator.Send(new GetStandupSummaryQuery(teamId, date, GetRole(), GetActorId(), All: true));
+        if (!result.IsSuccess)
+            return result.ToActionResult();
+
+        var csv = StandupSummaryCsvRenderer.Render(result.Data!);
+        var filename = $"standup-digest-{result.Data!.Date:yyyy-MM-dd}.csv";
+        return File(csv, "text/csv", filename);
+    }
 
     private Guid GetActorId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private string GetRole() => User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;

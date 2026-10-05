@@ -31,7 +31,10 @@ public record GetStandupSummaryQuery(
     string CallerRole,
     Guid CallerId,
     int Limit = 25,
-    string? Cursor = null) : IRequest<ServiceResult<StandupSummaryDto>>;
+    string? Cursor = null,
+    // Bypasses Limit/Cursor entirely and returns every scoped entry in one page — for the CSV
+    // export, which needs the whole day's digest rather than one screen's worth of rows.
+    bool All = false) : IRequest<ServiceResult<StandupSummaryDto>>;
 
 public class GetStandupSummaryHandler : IRequestHandler<GetStandupSummaryQuery, ServiceResult<StandupSummaryDto>>
 {
@@ -164,6 +167,12 @@ public class GetStandupSummaryHandler : IRequestHandler<GetStandupSummaryQuery, 
             .Where(e => checkInExpectedRoles.Contains(e.Role) && !checkInByEng[e.Id].Any())
             .Select(e => new MissingEngineerDto(e.Id, e.Name))
             .ToList();
+
+        if (query.All)
+        {
+            return ServiceResult<StandupSummaryDto>.Ok(
+                new StandupSummaryDto(date, query.TeamId, new PagedResultDto<StandupEntryDto>(entries, null, false), missingEngineers));
+        }
 
         // Entries are already fully computed above (bounded by one day's scoped headcount, cheap)
         // — this just bounds the response payload, same Limit/Cursor convention as every other
