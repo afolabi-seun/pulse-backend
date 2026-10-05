@@ -17,13 +17,23 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Sprints;
 using Pulse.Domain.Teams;
 using Pulse.Domain.TimeEntries;
+using Pulse.Application.Common.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Pulse.Infrastructure.Persistence;
 
-public class PulseDbContext : DbContext
+public partial class PulseDbContext : DbContext
 {
+    private readonly ICurrentUserService? _currentUser;
+
+    /// <summary>Unscoped: no organization filter applies. For design-time tooling and tests that
+    /// build a context directly; the app always goes through the constructor below.</summary>
     public PulseDbContext(DbContextOptions<PulseDbContext> options) : base(options) { }
+
+    [ActivatorUtilitiesConstructor]
+    public PulseDbContext(DbContextOptions<PulseDbContext> options, ICurrentUserService currentUser) : base(options) =>
+        _currentUser = currentUser;
 
     public DbSet<Epic> Epics => Set<Epic>();
     public DbSet<PulseTask> Tasks => Set<PulseTask>();
@@ -68,6 +78,7 @@ public class PulseDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PulseDbContext).Assembly);
+        ApplyOrganizationFilters(modelBuilder);
         base.OnModelCreating(modelBuilder);
     }
 }

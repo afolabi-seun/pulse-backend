@@ -7,12 +7,17 @@ namespace Pulse.Infrastructure.Persistence.Repositories;
 public class ThresholdRepository : IThresholdRepository
 {
     private readonly PulseDbContext _db;
+    private readonly ICurrentUserService _currentUser;
 
-    public ThresholdRepository(PulseDbContext db) => _db = db;
+    public ThresholdRepository(PulseDbContext db, ICurrentUserService currentUser)
+    {
+        _db = db;
+        _currentUser = currentUser;
+    }
 
-    // Settings are keyed per organization. Until multi-tenancy Phase 1c passes the caller's org in,
-    // every read and write is explicitly the default org's — the only org that exists.
-    private static readonly Guid OrganizationId = Organization.DefaultId;
+    // Settings are keyed per organization: the caller's. Background jobs have no caller and use the
+    // default org's settings until multi-tenancy Phase 1e runs them per organization.
+    private Guid OrganizationId => _currentUser.OrganizationId ?? Organization.DefaultId;
 
     public async Task<Dictionary<string, string>> LoadAllAsync(CancellationToken ct = default) =>
         await _db.ThresholdSettings

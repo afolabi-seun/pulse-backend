@@ -23,6 +23,49 @@ public class ProjectAccessPolicyTests
     private readonly Guid _projectId = Guid.NewGuid();
     private readonly Guid _actorId = Guid.NewGuid();
 
+    public ProjectAccessPolicyTests()
+    {
+        // The policy treats a project or team that isn't found (including another organization's,
+        // hidden by the org query filter) as inaccessible. Default every lookup to "exists, with no
+        // owner, team or department" so each test only sets up what it's actually about; tests that
+        // need a specific project or team override these with their own Setup.
+        _projects.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Project.Create("Existing project"));
+        _teams.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Team.Create("Existing team"));
+    }
+
+    // ── Not found (incl. another organization's) ─────────────────────────────
+
+    [Theory]
+    [InlineData(Roles.ProjectManager)]
+    [InlineData(Roles.HeadOfPmo)]
+    [InlineData(Roles.HeadOfRnD)]
+    [InlineData(Roles.Engineer)]
+    public async Task A_project_that_is_not_found_is_denied_even_to_global_roles(string role)
+    {
+        _projects.Setup(r => r.GetByIdAsync(_projectId, It.IsAny<CancellationToken>())).ReturnsAsync((Project?)null);
+        _projects.Setup(r => r.IsMemberAsync(_projectId, _actorId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var allowed = await Policy().CanAccessProjectAsync(_projectId, _actorId, role);
+
+        allowed.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(Roles.ProjectManager)]
+    [InlineData(Roles.HeadOfRnD)]
+    [InlineData(Roles.TeamLead)]
+    public async Task A_team_that_is_not_found_is_denied_even_to_global_and_unscoped_roles(string role)
+    {
+        var teamId = Guid.NewGuid();
+        _teams.Setup(r => r.GetByIdAsync(teamId, It.IsAny<CancellationToken>())).ReturnsAsync((Team?)null);
+
+        var allowed = await Policy().CanAccessTeamAsync(teamId, _actorId, role);
+
+        allowed.Should().BeFalse();
+    }
+
     // ── Individual contributors: members only ─────────────────────────────────
 
     [Fact]
