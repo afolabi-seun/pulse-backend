@@ -19,6 +19,7 @@ public class EngineerConfiguration : IEntityTypeConfiguration<Engineer>
         builder.Property(e => e.BaselineCycleDays).HasColumnName("baseline_cycle_days").IsRequired();
         builder.Property(e => e.Team).HasColumnName("team").HasMaxLength(100);
         builder.Property(e => e.TeamId).HasColumnName("team_id");
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "engineers");
         builder.Property(e => e.IsQa).HasColumnName("is_qa").IsRequired().HasDefaultValue(false);
         builder.Property(e => e.Discipline).HasColumnName("discipline")
             .HasConversion<string>().HasMaxLength(20);
