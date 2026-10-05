@@ -15,9 +15,11 @@ public class CreateAlertRuleHandlerTests
     private readonly Mock<ITeamRepository> _teams = new();
     private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IProjectAccessPolicy> _access = new();
+    // No organization set: the default org, where Slack/Google Chat delivery is available.
+    private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private CreateAlertRuleHandler CreateHandler() =>
-        new(_rules.Object, _teams.Object, _projects.Object, _access.Object);
+        new(_rules.Object, _teams.Object, _projects.Object, _access.Object, _currentUser.Object);
 
     [Fact]
     public async Task Returns_NOT_FOUND_when_the_team_does_not_exist()
