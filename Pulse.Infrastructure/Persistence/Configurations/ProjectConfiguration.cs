@@ -19,6 +19,7 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.Property(p => p.OwnerTeamId).HasColumnName("owner_team_id");
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "projects");
         builder.Property(p => p.PersonalOwnerId).HasColumnName("personal_owner_id");
         // At most one personal project per person.
         builder.HasIndex(p => p.PersonalOwnerId).IsUnique()
