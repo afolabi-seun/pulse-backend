@@ -1,0 +1,85 @@
+name: Production smoke test
+
+# Runs the API in PRODUCTION mode against a real Postgres, set up the way production is (an owner role for migrations, a restricted role for
+# requests), and checks what unit and integration tests cannot see because they run in Development: no Swagger, no database-wiping demo
+# endpoints, no stack traces in errors, protected routes need a login, and the refresh token is only ever in an httpOnly cookie.
+# See scripts/smoke-production.sh, which can also be pointed at a deployed server.
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pulse_admin
+          POSTGRES_PASSWORD: devpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pulse_admin -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Create the owner and restricted database roles
+        env:
+          PGPASSWORD: devpassword
+        run: psql -h localhost -U pulse_admin -d postgres -v ON_ERROR_STOP=1 -f scripts/ci/postgres-roles.sql
+
+      - name: Publish the API
+        run: dotnet publish Pulse.Api --configuration Release --output out
+
+      - name: Start the API in Production mode
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ASPNETCORE_URLS: http://127.0.0.1:8080
+          ALLOWED_ORIGINS: http://localhost:5173
+          APP_BASE_URL: http://localhost:5173
+          JWT_SECRET_KEY: ci-only-signing-key-not-a-secret-0123456789abcdef
+          JWT_ISSUER: pulse
+          JWT_AUDIENCE: pulse
+          JWT_ACCESS_EXPIRY_TIME: "30"
+          JWT_VERIFY_EMAIL_EXPIRY_TIME: "24"
+          JWT_FORGET_PASSWORD_EXPIRY_TIME: "15"
+          Mail_Host: localhost
+          Mail_Port: "25"
+          Mail_User: ci
+          Mail_Password: ci
+          Mail_FromName: Pulse CI
+          Mail_FromAddress: ci@pulse.test
+          Mail_EnableSsl: "false"
+          # Requests run as the restricted role; startup migrations and Hangfire as the owner. ENABLE_DEMO_ENDPOINTS is deliberately NOT set.
+          DB_CONNECTION: Host=localhost;Port=5432;Database=pulse_dev;Username=pulse_rls_app;Password=rlspassword
+          DB_MIGRATION_CONNECTION: Host=localhost;Port=5432;Database=pulse_dev;Username=pulse_owner;Password=ownerpassword
+        run: |
+          nohup dotnet out/Pulse.Api.dll > api.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8080/healthz >/dev/null 2>&1; then echo "API is up after about $((i * 2))s."; exit 0; fi
+            sleep 2
+          done
+          echo "The API did not start. Log:"; cat api.log; exit 1
+
+      - name: Smoke test
+        run: scripts/smoke-production.sh http://127.0.0.1:8080
+
+      - name: API log (on failure)
+        if: failure()
+        run: cat api.log || true
