@@ -1,0 +1,38 @@
+name: Release PR
+
+# Keeps one open dev -> main pull request whenever dev has commits main doesn't.
+# Merging it is still a manual decision.
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  open-release-pr:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Open release PR if needed
+        run: |
+          ahead=$(gh api "repos/$GH_REPO/compare/main...dev" -q .ahead_by)
+          if [ "$ahead" = "0" ]; then
+            echo "dev has nothing main doesn't; no release PR needed."
+            exit 0
+          fi
+          existing=$(gh pr list --base main --head dev --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "Release PR #$existing is already open and now includes the latest dev commits."
+            exit 0
+          fi
+          gh pr create --base main --head dev \
+            --title "Release: dev → main" \
+            --body "Opened automatically because dev has $ahead commit(s) not yet in main. Merge with a merge commit (not squash) when ready to release."
