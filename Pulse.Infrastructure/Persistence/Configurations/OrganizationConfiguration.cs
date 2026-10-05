@@ -22,15 +22,15 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
 
     /// <summary>
     /// Shared mapping for the OrganizationId column on the tenancy-root tables (teams, engineers,
-    /// projects). The column default is the default org, so inserts that don't set it — every insert,
-    /// until Phase 2 makes the caller's org flow through — still land in a real organization, and
-    /// Phase 1 can tighten the column to NOT NULL without a second backfill.
+    /// projects). Required; the column default (the default org) remains only so that inserts from an
+    /// app version that predates the column still land in a real organization during a rolling deploy.
     /// </summary>
     internal static void ConfigureOrganizationId<T>(EntityTypeBuilder<T> builder, string table)
         where T : class
     {
-        builder.Property<Guid?>("OrganizationId")
+        builder.Property<Guid>("OrganizationId")
             .HasColumnName("organization_id")
+            .IsRequired()
             .HasDefaultValue(Organization.DefaultId);
 
         builder.HasIndex("OrganizationId").HasDatabaseName($"ix_{table}_organization_id");

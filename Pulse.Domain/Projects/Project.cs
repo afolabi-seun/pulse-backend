@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Pulse.Domain.Common;
+using Pulse.Domain.Organizations;
 
 namespace Pulse.Domain.Projects;
 
@@ -9,9 +10,9 @@ public class Project : Entity
     public string? Description { get; private set; }
     public ProjectStatus Status { get; private set; } = ProjectStatus.Active;
     public Guid? OwnerTeamId { get; private set; }
-    /// <summary>Owning organization. Phase 0 of multi-tenancy: always the default org (set by the
-    /// column default when left null on insert), and not yet read anywhere.</summary>
-    public Guid? OrganizationId { get; private set; }
+    /// <summary>Owning organization. Always the default org until multi-tenancy Phase 2 passes the
+    /// creator's org into Create.</summary>
+    public Guid OrganizationId { get; private set; } = Organization.DefaultId;
     /// <summary>Short, unique, uppercase key used as the prefix for every task's display ID in this
     /// project (e.g. "NOTIF" for task keys like NOTIF-011). Uniqueness is enforced by callers
     /// (ProjectCodeGenerator + a DB unique index) — this class only enforces the format.</summary>
