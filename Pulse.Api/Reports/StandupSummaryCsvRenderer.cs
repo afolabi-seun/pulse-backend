@@ -37,12 +37,17 @@ public static class StandupSummaryCsvRenderer
 
             // A single check-in reads exactly as it did before (no project prefix clutter); two or
             // more are tagged "[Project] text" and joined, so nothing is dropped when combined.
+            // Either way, FlattenLines keeps the whole cell on one physical CSV line — a check-in's
+            // own text is often itself a line per completed item (auto check-ins write one
+            // "Completed: ..." line per task), and left as embedded newlines, only the first line
+            // visually lines up with this row's Team/Engineer/Project columns in most viewers, so
+            // the rest reads as if it belongs to no one.
             string Combine(Func<StandupEntryDto, string?> select)
             {
-                if (list.Count == 1) return select(first) ?? "";
+                if (list.Count == 1) return FlattenLines(select(first));
                 var parts = list
                     .Where(e => !string.IsNullOrEmpty(select(e)))
-                    .Select(e => $"[{ProjectLabel(e)}] {select(e)}");
+                    .Select(e => $"[{ProjectLabel(e)}] {FlattenLines(select(e))}");
                 return string.Join(" | ", parts);
             }
 
@@ -64,6 +69,19 @@ public static class StandupSummaryCsvRenderer
     }
 
     private static string ProjectLabel(StandupEntryDto e) => e.ProjectName ?? "General";
+
+    /// <summary>Joins a (possibly multi-line) check-in field into one physical CSV line, dropping
+    /// blank lines and trimming each — so e.g. an auto check-in's "one line per completed task"
+    /// text reads as "item 1; item 2; item 3" instead of breaking the row across several lines.</summary>
+    private static string FlattenLines(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        var lines = text
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0);
+        return string.Join("; ", lines);
+    }
 
     private static string RoleLabel(string role) =>
         role.Replace('_', ' ');
