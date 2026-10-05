@@ -10,6 +10,7 @@ public class FailedEmailConfiguration : IEntityTypeConfiguration<FailedEmail>
     {
         builder.ToTable("failed_emails");
         builder.HasKey(e => e.Id);
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "failed_emails");
         builder.Property(e => e.Id).HasColumnName("id");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(e => e.To).HasColumnName("to").HasMaxLength(320).IsRequired();

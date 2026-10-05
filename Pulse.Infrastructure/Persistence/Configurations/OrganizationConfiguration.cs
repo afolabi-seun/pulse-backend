@@ -21,11 +21,13 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
     }
 
     /// <summary>
-    /// Shared mapping for the OrganizationId column on the tenancy-root tables (teams, engineers,
-    /// projects). Required; the column default (the default org) remains only so that inserts from an
-    /// app version that predates the column still land in a real organization during a rolling deploy.
+    /// Shared mapping for the OrganizationId column on every table that carries one directly: the
+    /// tenancy roots (teams, engineers, projects) and org-wide settings with no other path to an org.
+    /// Required; the column default (the default org) remains only so that inserts from an app version
+    /// that predates the column still land in a real organization during a rolling deploy.
+    /// Pass <paramref name="index"/> false when a composite key or index already leads with the column.
     /// </summary>
-    internal static void ConfigureOrganizationId<T>(EntityTypeBuilder<T> builder, string table)
+    internal static void ConfigureOrganizationId<T>(EntityTypeBuilder<T> builder, string table, bool index = true)
         where T : class
     {
         builder.Property<Guid>("OrganizationId")
@@ -33,7 +35,8 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .IsRequired()
             .HasDefaultValue(Organization.DefaultId);
 
-        builder.HasIndex("OrganizationId").HasDatabaseName($"ix_{table}_organization_id");
+        if (index)
+            builder.HasIndex("OrganizationId").HasDatabaseName($"ix_{table}_organization_id");
 
         builder.HasOne<Organization>()
             .WithMany()

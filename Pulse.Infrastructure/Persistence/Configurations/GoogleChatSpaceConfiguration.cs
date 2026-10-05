@@ -10,6 +10,7 @@ public class GoogleChatSpaceConfiguration : IEntityTypeConfiguration<GoogleChatS
     {
         builder.ToTable("google_chat_spaces");
         builder.HasKey(s => s.Id);
+        OrganizationConfiguration.ConfigureOrganizationId(builder, "google_chat_spaces");
         builder.Property(s => s.Id).HasColumnName("id");
         builder.Property(s => s.SpaceId).HasColumnName("space_id").HasMaxLength(200).IsRequired();
         builder.Property(s => s.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
