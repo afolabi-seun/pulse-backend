@@ -13,6 +13,9 @@ public class Engineer : Entity
     public int BaselineCycleDays { get; private set; }
     public string? Team { get; private set; }
     public Guid? TeamId { get; private set; }
+    /// <summary>Owning organization. Phase 0 of multi-tenancy: always the default org (set by the
+    /// column default when left null on insert), and not yet read anywhere.</summary>
+    public Guid? OrganizationId { get; private set; }
     public bool IsQa { get; private set; }
     public Discipline? Discipline { get; private set; }
     public bool IsActive { get; private set; } = true;
