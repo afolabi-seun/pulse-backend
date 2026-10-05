@@ -1,0 +1,41 @@
+name: Release PR
+
+# Keeps one open dev -> main pull request whenever dev has commits main doesn't,
+# and turns on auto-merge so it merges itself once CI (build-and-test) passes.
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  open-release-pr:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Open release PR if needed
+        run: |
+          ahead=$(gh api "repos/$GH_REPO/compare/main...dev" -q .ahead_by)
+          if [ "$ahead" = "0" ]; then
+            echo "dev has nothing main doesn't; no release PR needed."
+            exit 0
+          fi
+          pr=$(gh pr list --base main --head dev --state open --json number -q '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --base main --head dev \
+              --title "Release: dev → main" \
+              --body "Opened automatically because dev has commits not yet in main. Merges itself once CI passes."
+            pr=$(gh pr list --base main --head dev --state open --json number -q '.[0].number')
+          fi
+          # Merge commit (not squash) so dev and main keep sharing history.
+          # Requires "Allow auto-merge" and build-and-test as a required check on main.
+          gh pr merge "$pr" --auto --merge
+          echo "Auto-merge enabled on PR #$pr."
