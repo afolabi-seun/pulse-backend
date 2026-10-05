@@ -7,34 +7,30 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Pulse.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Spins up the full ASP.NET Core pipeline against a real PostgreSQL instance managed by Testcontainers.
+/// Spins up the full ASP.NET Core pipeline against a real PostgreSQL database. All test classes share one Testcontainers
+/// Postgres (see SharedPostgres); each class gets its own database cloned from a template that already has every migration applied.
 /// The HIBP checker is replaced with a no-op stub so tests never make external HTTP calls.
 /// </summary>
 public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithDatabase("pulse_test")
-        .WithUsername("pulse")
-        .WithPassword("testpassword")
-        .Build();
+    private string _connectionString = string.Empty;
 
-    /// <summary>Raw connection string for tests that bypass EF to verify row-level security at the DB layer.</summary>
-    public string ConnectionString => _postgres.GetConnectionString();
+    /// <summary>Raw connection string for tests that bypass EF to verify row-level security at the DB layer. Points at this class's own database.</summary>
+    public string ConnectionString => _connectionString;
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = await SharedPostgres.CreateDatabaseAsync();
 
         // AppSettings.FromEnvironment() is called in Program.cs before the factory can
         // override services. Set the minimum required env vars here so it doesn't throw.
         // The DB context is replaced below with the Testcontainers connection.
-        Environment.SetEnvironmentVariable("DB_CONNECTION", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("DB_CONNECTION", _connectionString);
         Environment.SetEnvironmentVariable("JWT_SECRET_KEY", "test-signing-key-minimum-32-chars-long!!");
         Environment.SetEnvironmentVariable("JWT_ISSUER", "pulse");
         Environment.SetEnvironmentVariable("JWT_AUDIENCE", "pulse");
@@ -54,8 +50,8 @@ public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsync
 
     public new async Task DisposeAsync()
     {
-        await _postgres.DisposeAsync();
-        await base.DisposeAsync();
+        await base.DisposeAsync();                                   // close the host's connections first
+        await SharedPostgres.DropDatabaseAsync(_connectionString);   // the container itself outlives the class and is reaped with the run
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -68,7 +64,7 @@ public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsync
             // Replace real DB context with Testcontainers connection
             var descriptor = services.Single(d => d.ServiceType == typeof(DbContextOptions<PulseDbContext>));
             services.Remove(descriptor);
-            var connStr = _postgres.GetConnectionString() + ";Include Error Detail=true";
+            var connStr = _connectionString + ";Include Error Detail=true";
             // Keep the RLS interceptor attached — without it no session GUCs are set and the
             // FORCEd row-level policies would filter out every row, breaking the whole suite.
             services.AddDbContext<PulseDbContext>((sp, opts) =>
@@ -78,6 +74,12 @@ public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsync
             // Replace HIBP checker with a stub that never flags breached passwords in tests
             services.RemoveAll<IBreachedPasswordChecker>();
             services.AddSingleton<IBreachedPasswordChecker, AlwaysCleanPasswordChecker>();
+
+            // Argon2id (64 MB, 4 passes) is deliberately slow, and these tests seed several users and log in several times each, so it was
+            // a large share of every test. Hashing is not what they exercise (Pulse.UnitTests.Security.Argon2PasswordHasherTests covers the real one), so they use a
+            // fast hasher with the same salted "salt:hash" format. Everything resolves IPasswordHasher from DI, so seeding and login agree.
+            services.RemoveAll<IPasswordHasher>();
+            services.AddSingleton<IPasswordHasher, FastTestPasswordHasher>();
 
             // Replace email service with a no-op stub so tests don't attempt SMTP connections
             services.RemoveAll<IEmailService>();
@@ -106,6 +108,27 @@ public class PulseWebApplicationFactory : WebApplicationFactory<Program>, IAsync
     {
         public Task<bool> IsBreachedAsync(string password, CancellationToken ct = default) =>
             Task.FromResult(false);
+    }
+
+    /// <summary>Same shape as the real hasher (a random salt, then the hash) but a single SHA-256, so tests are not paying Argon2's cost.</summary>
+    private sealed class FastTestPasswordHasher : IPasswordHasher
+    {
+        public string Hash(string password)
+        {
+            var salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+            return $"{Convert.ToBase64String(salt)}:{Convert.ToBase64String(Compute(password, salt))}";
+        }
+
+        public bool Verify(string password, string storedHash)
+        {
+            var parts = storedHash.Split(':');
+            if (parts.Length != 2) return false;
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                Compute(password, Convert.FromBase64String(parts[0])), Convert.FromBase64String(parts[1]));
+        }
+
+        private static byte[] Compute(string password, byte[] salt) =>
+            System.Security.Cryptography.SHA256.HashData([.. salt, .. System.Text.Encoding.UTF8.GetBytes(password)]);
     }
 
     /// <summary>Stub email service — silently discards all outgoing mail in tests.</summary>
