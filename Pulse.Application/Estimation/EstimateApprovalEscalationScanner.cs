@@ -58,13 +58,13 @@ public class EstimateApprovalEscalationScanner
         // reassigned since submission (new assignee, no Team Lead of their own, etc.) could
         // already resolve straight to the department head, in which case there's nothing to
         // escalate to.
-        var before = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: false, _engineers, _teams, ct);
+        var before = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: false, session.SubmittedBy, _engineers, _teams, ct);
         if (before is not { Stage: ApprovalStage.TeamLead }) return;
 
         session.EscalateToHead();
         await _estimation.SaveChangesAsync(ct);
 
-        var after = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: true, _engineers, _teams, ct);
+        var after = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: true, session.SubmittedBy, _engineers, _teams, ct);
         if (after is null) return;
 
         // Only the newly-added department head(s) get notified here — the Team Lead already knows

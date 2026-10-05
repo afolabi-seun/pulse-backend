@@ -18,11 +18,16 @@ public record ApprovalState(IReadOnlyList<Engineer> Approvers, ApprovalStage Sta
 /// (set by EstimateApprovalEscalationScanner after a grace period) or when there's no Team-Lead tier
 /// to begin with (the assignee IS a Team Lead, or has no resolvable Team Lead at all) — or, when no
 /// department head can be resolved either, a Team Lead+ fallback, so a task never ends up with an
-/// estimate nobody can act on. See docs/planning-poker-approval-tiers-spec.md.</summary>
+/// estimate nobody can act on. See docs/planning-poker-approval-tiers-spec.md.
+///
+/// Whoever submitted an estimate can never be the one who approves or rejects it: a Team Lead who submits on an engineer's
+/// behalf would otherwise be that engineer's approver too, and the whole point of an approval is a second pair of eyes.
+/// The submitter is dropped from every approver list, and a submitting Team Lead's own tier is skipped so the request goes
+/// straight to the department head instead of waiting on someone who cannot act on it.</summary>
 public static class EstimationApproval
 {
     public static async Task<ApprovalState?> ResolveApproversAsync(
-        Guid? assigneeId, bool escalatedToHead,
+        Guid? assigneeId, bool escalatedToHead, Guid? submittedBy,
         IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
     {
         if (assigneeId is not Guid id) return null; // no assignee — caller's own TeamLeadOrAbove fallback applies
@@ -33,6 +38,8 @@ public static class EstimationApproval
         var skipTeamLeadTier = assignee?.Role == Roles.TeamLead;
 
         var teamLead = skipTeamLeadTier ? null : await DepartmentScope.GetOwnTeamLeadAsync(id, engineers, teams, ct);
+        // A team lead who submitted it cannot also be the first-line approver of their own submission.
+        if (teamLead is not null && teamLead.Id == submittedBy) teamLead = null;
 
         if (teamLead is not null && !escalatedToHead)
             return new([teamLead], ApprovalStage.TeamLead);
@@ -44,14 +51,17 @@ public static class EstimationApproval
             // No Team Lead tier to begin with (skipped, or none resolvable).
             : heads.Cast<Engineer>().ToList();
 
-        return new(approvers, ApprovalStage.DepartmentHead);
+        // Never the submitter, whichever tier they would otherwise have sat in (a head who submitted for someone, say).
+        return new(approvers.Where(a => a.Id != submittedBy).ToList(), ApprovalStage.DepartmentHead);
     }
 
     public static async Task<bool> IsAuthorizedAsync(
-        Guid? assigneeId, Guid actorId, string actorRole, bool escalatedToHead,
+        Guid? assigneeId, Guid actorId, string actorRole, bool escalatedToHead, Guid? submittedBy,
         IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
     {
-        var state = await ResolveApproversAsync(assigneeId, escalatedToHead, engineers, teams, ct);
+        if (actorId == submittedBy) return false;
+
+        var state = await ResolveApproversAsync(assigneeId, escalatedToHead, submittedBy, engineers, teams, ct);
         if (state is null || state.Approvers.Count == 0)
             return CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(actorRole);
 
