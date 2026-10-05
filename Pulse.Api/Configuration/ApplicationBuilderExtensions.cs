@@ -45,57 +45,11 @@ public static class ApplicationBuilderExtensions
             throw;
         }
 
-        // Read-only hydration below can use the runtime context (threshold_settings is not RLS-scoped).
+        // Read-only startup checks below can use the runtime context.
         var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
 
-        // Hydrate the OverworkThresholds singleton from DB so custom values survive restarts.
-        // Non-critical: defaults exist, so a failure here must not prevent the API from booting.
-        try
-        {
-        var settings = await db.ThresholdSettings.ToDictionaryAsync(t => t.Key, t => t.Value);
-        var thresholds = app.Services.GetRequiredService<OverworkThresholds>();
-
-        if (settings.TryGetValue("LoadVsBaselineRatio", out var v1) && double.TryParse(v1, out var ratio))
-            thresholds.LoadVsBaselineRatio = ratio;
-        if (settings.TryGetValue("MaxConcurrentTasks", out var v2) && int.TryParse(v2, out var concurrent))
-            thresholds.MaxConcurrentTasks = concurrent;
-        if (settings.TryGetValue("StaleCycleMultiplier", out var v3) && double.TryParse(v3, out var stale))
-            thresholds.StaleCycleMultiplier = stale;
-        if (settings.TryGetValue("SignalsRequiredToFlag", out var v4) && int.TryParse(v4, out var signals))
-            thresholds.SignalsRequiredToFlag = signals;
-        if (settings.TryGetValue("EscalationT3Days", out var v5) && double.TryParse(v5, out var t3Days))
-            thresholds.EscalationT3Days = t3Days;
-        if (settings.TryGetValue("EscalationT3ElapsedPct", out var v6) && double.TryParse(v6, out var t3Pct))
-            thresholds.EscalationT3ElapsedPct = t3Pct;
-        if (settings.TryGetValue("EscalationT1Days", out var v7) && double.TryParse(v7, out var t1Days))
-            thresholds.EscalationT1Days = t1Days;
-        if (settings.TryGetValue("EscalationT1ElapsedPct", out var v8) && double.TryParse(v8, out var t1Pct))
-            thresholds.EscalationT1ElapsedPct = t1Pct;
-        if (settings.TryGetValue("EscalationT3MinHours", out var v9) && double.TryParse(v9, out var t3MinH))
-            thresholds.EscalationT3MinHours = t3MinH;
-        if (settings.TryGetValue("EscalationT1MinHours", out var v10) && double.TryParse(v10, out var t1MinH))
-            thresholds.EscalationT1MinHours = t1MinH;
-        if (settings.TryGetValue("QaLeadTimeDays", out var v11) && int.TryParse(v11, out var qaLead))
-            thresholds.QaLeadTimeDays = qaLead;
-        if (settings.TryGetValue("PointScale", out var psJson) && !string.IsNullOrEmpty(psJson))
-        {
-            var entries = JsonSerializer.Deserialize<PointScaleEntry[]>(psJson,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (entries is { Length: > 0 })
-                thresholds.PointScale = entries;
-        }
-        if (settings.TryGetValue("PriorityScale", out var prJson) && !string.IsNullOrEmpty(prJson))
-        {
-            var entries = JsonSerializer.Deserialize<PriorityScaleEntry[]>(prJson,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (entries is { Length: > 0 })
-                thresholds.PriorityScale = entries;
-        }
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogWarning(ex, "Failed to hydrate overwork thresholds from the database; using defaults.");
-        }
+        // OverworkThresholds are loaded per organization on first use (OrganizationThresholdsProvider);
+        // there's no process-wide copy to hydrate at startup any more.
 
         // V1 assumption: exactly one project manager exists. Notification resolution targets a single PM.
         // This assertion is informational — it logs a warning but does not prevent startup.

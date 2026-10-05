@@ -87,7 +87,13 @@ public class ProjectAccessPolicy : IProjectAccessPolicy
         // "unscoped" fallback below reaches it, not even the org-wide ones. Checked first so nothing can
         // short-circuit past it.
         var project = await _projects.GetByIdAsync(projectId, ct);
-        if (project?.PersonalOwnerId is Guid personalOwnerId)
+        // Not found — including another organization's project, which the org query filter hides — is
+        // never accessible. Checked before the role short-circuits below, which would otherwise wave a
+        // global role through to a project that, from the caller's org, doesn't exist.
+        if (project is null)
+            return false;
+
+        if (project.PersonalOwnerId is Guid personalOwnerId)
             return personalOwnerId == actorId;
 
         if (GlobalRoles.Contains(actorRole))
@@ -119,7 +125,7 @@ public class ProjectAccessPolicy : IProjectAccessPolicy
                 || await ProjectHasLedTeamMemberAsync(projectId, actorId, ct);
 
         // Individual contributors: on the team that owns the project.
-        if (project?.OwnerTeamId is Guid ownerTeamId)
+        if (project.OwnerTeamId is Guid ownerTeamId)
         {
             var actor = await _engineers.GetByIdAsync(actorId, ct);
             if (actor?.TeamId == ownerTeamId)
@@ -181,6 +187,11 @@ public class ProjectAccessPolicy : IProjectAccessPolicy
 
     public async Task<bool> CanAccessTeamAsync(Guid teamId, Guid actorId, string actorRole, CancellationToken ct = default)
     {
+        // Not found — including another organization's team, hidden by the org query filter — is never
+        // accessible; the role short-circuits below would otherwise allow it.
+        if (await _teams.GetByIdAsync(teamId, ct) is null)
+            return false;
+
         if (GlobalRoles.Contains(actorRole))
             return true;
 
