@@ -1,3 +1,5 @@
+using Pulse.Domain.Organizations;
+
 namespace Pulse.Application.Overwork;
 
 /// <summary>A department's override of the four overwork-detection thresholds, falling back
@@ -6,6 +8,8 @@ namespace Pulse.Application.Overwork;
 /// override.</summary>
 public class DepartmentThresholdOverride
 {
+    /// <summary>Overrides are per organization: (OrganizationId, Department) is the key.</summary>
+    public Guid OrganizationId { get; set; } = Organization.DefaultId;
     public string Department { get; set; } = string.Empty;
     public double? LoadVsBaselineRatio { get; set; }
     public int? MaxConcurrentTasks { get; set; }
