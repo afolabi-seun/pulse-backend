@@ -4,6 +4,7 @@ using Pulse.Domain.CheckIns;
 using Pulse.Domain.Engineers;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.CheckIns;
 
@@ -14,7 +15,7 @@ public class CheckInNudgeJobTests
     private readonly Mock<IEmailQueue> _emailQueue = new();
     private readonly Mock<IAppSettings> _settings = new();
 
-    private CheckInNudgeJob CreateJob() => new(_checkIns.Object, _engineers.Object, _emailQueue.Object, _settings.Object);
+    private CheckInNudgeJob CreateJob() => new(_checkIns.Object, _engineers.Object, _settings.Object, TestNotifications.Dispatcher(email: _emailQueue));
 
     private static Engineer NewEngineer(string name) =>
         Engineer.Create(name, $"{name.ToLower()}@test.io", "hash", Roles.Engineer, 20, 14);

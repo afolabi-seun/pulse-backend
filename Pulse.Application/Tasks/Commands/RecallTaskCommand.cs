@@ -22,9 +22,7 @@ public class RecallTaskHandler : IRequestHandler<RecallTaskCommand, ServiceResul
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
     private readonly IEscalationEventRepository _escalationEvents;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public RecallTaskHandler(
@@ -33,9 +31,7 @@ public class RecallTaskHandler : IRequestHandler<RecallTaskCommand, ServiceResul
         ITeamRepository teams,
         IAuditLogRepository audit,
         IEscalationEventRepository escalationEvents,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings)
     {
         _tasks = tasks;
@@ -43,9 +39,7 @@ public class RecallTaskHandler : IRequestHandler<RecallTaskCommand, ServiceResul
         _teams = teams;
         _audit = audit;
         _escalationEvents = escalationEvents;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -105,19 +99,13 @@ public class RecallTaskHandler : IRequestHandler<RecallTaskCommand, ServiceResul
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because a task loaned to you was recalled.")}
                     """;
-                _emailQueue.Enqueue(borrower.Email, $"Task recalled: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(borrower.Id, NotificationKind.TaskRecalled, new NotificationEmail(borrower.Email, $"Task recalled: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));
     }
 
-    private async Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct)
-    {
-        var n = Notification.Create(userId, kind,
-            JsonSerializer.Serialize(payload), NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(userId, NotificationDto.From(n), ct);
-    }
+    private Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct) =>
+        _notify.NotifyAsync(userId, kind, payload, ct: ct);
 }

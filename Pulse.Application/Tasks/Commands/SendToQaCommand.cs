@@ -26,9 +26,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
     private readonly IAuditLogRepository _audit;
     private readonly IProjectAccessPolicy _access;
     private readonly OverworkThresholds _thresholds;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
     private readonly ICheckInRepository _checkIns;
 
@@ -40,9 +38,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
         IAuditLogRepository audit,
         IProjectAccessPolicy access,
         OverworkThresholds thresholds,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings,
         ICheckInRepository checkIns)
     {
@@ -53,9 +49,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
         _audit = audit;
         _access = access;
         _thresholds = thresholds;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
         _checkIns = checkIns;
     }
@@ -162,10 +156,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
             // frontend already renders it, and the "[QA] " title prefix makes the review nature
             // clear at a glance); the email copy is written specifically for a QA review though.
             var payload = JsonSerializer.Serialize(new { taskId = qaTask.Id, taskTitle = qaTask.Title });
-            var n = Notification.Create(qaEngineer.Value, NotificationKind.TaskAssigned, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(qaEngineer.Value, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(qaEngineer.Value, NotificationKind.TaskAssigned, payload, ct: ct);
 
             var reviewer = await _engineers.GetByIdAsync(qaEngineer.Value, ct);
             if (reviewer is not null)
@@ -178,7 +169,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you were assigned to review this task.")}
                     """;
-                _emailQueue.Enqueue(reviewer.Email, $"QA review assigned: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(reviewer.Id, NotificationKind.TaskAssigned, new NotificationEmail(reviewer.Email, $"QA review assigned: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
         // No QA engineer matched the project — the task is otherwise correctly "awaiting QA",
@@ -195,10 +186,7 @@ public class SendToQaHandler : IRequestHandler<SendToQaCommand, ServiceResult<Ta
                 taskTitle = qaTask.Title,
             });
 
-            var n = Notification.Create(submitterId, NotificationKind.QaUnassigned, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(submitterId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(submitterId, NotificationKind.QaUnassigned, payload, ct: ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));

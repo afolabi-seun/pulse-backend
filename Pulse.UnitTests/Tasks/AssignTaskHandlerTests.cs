@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -33,7 +34,7 @@ public class AssignTaskHandlerTests
 
     private AssignTaskHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _teams.Object, _audit.Object, _projects.Object, _access.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     private static PulseTask UnassignedTask(bool withDueDate = true) =>
         PulseTask.Create("Unassigned work", 5, Guid.NewGuid(),

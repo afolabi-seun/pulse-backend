@@ -21,23 +21,20 @@ public class WithdrawQaRejectionHandler : IRequestHandler<WithdrawQaRejectionCom
 {
     private readonly ITaskRepository _tasks;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
+    private readonly INotificationDispatcher _notify;
 
     public WithdrawQaRejectionHandler(
         ITaskRepository tasks,
         IAuditLogRepository audit,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
         IEngineerRepository engineers,
-        ITeamRepository teams)
+        ITeamRepository teams,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
         _engineers = engineers;
         _teams = teams;
     }
@@ -76,10 +73,7 @@ public class WithdrawQaRejectionHandler : IRequestHandler<WithdrawQaRejectionCom
         if (parentTask.AssigneeId is Guid assigneeId)
         {
             var payload = JsonSerializer.Serialize(new { taskId = parentTask.Id, taskTitle = parentTask.Title });
-            var n = Notification.Create(assigneeId, NotificationKind.QaRejectionWithdrawn, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(assigneeId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(assigneeId, NotificationKind.QaRejectionWithdrawn, payload, ct: ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(parentTask));

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Notifications;
 using Pulse.Domain.Notifications;
 using MediatR;
 
@@ -13,20 +14,20 @@ public class UnfollowProjectHandler : IRequestHandler<UnfollowProjectCommand, Se
     private readonly IProjectRepository _projects;
     private readonly IProjectFollowRepository _follows;
     private readonly IEngineerRepository _engineers;
-    private readonly INotificationRepository _notifications;
     private readonly IAuditLogRepository _audit;
+    private readonly INotificationDispatcher _notify;
 
     public UnfollowProjectHandler(
         IProjectRepository projects,
         IProjectFollowRepository follows,
         IEngineerRepository engineers,
-        INotificationRepository notifications,
-        IAuditLogRepository audit)
+        IAuditLogRepository audit,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _projects      = projects;
         _follows       = follows;
         _engineers     = engineers;
-        _notifications = notifications;
         _audit         = audit;
     }
 
@@ -48,15 +49,7 @@ public class UnfollowProjectHandler : IRequestHandler<UnfollowProjectCommand, Se
         var teamLeadIds = await _follows.GetTeamLeadIdsForProjectAsync(cmd.ProjectId, ct);
         var payload = JsonSerializer.Serialize(new { followerName = follower?.Name ?? "Head", projectName = project?.Name ?? "the project" });
         foreach (var leadId in teamLeadIds)
-        {
-            await _notifications.AddAsync(Notification.Create(
-                leadId,
-                "PROJECT_FOLLOW_ENDED",
-                payload), ct);
-        }
-
-        if (teamLeadIds.Count > 0)
-            await _notifications.SaveChangesAsync(ct);
+            await _notify.NotifyAsync(leadId, NotificationCatalog.ProjectFollowEnded, payload, ct: ct);
 
         return ServiceResult<bool>.Ok(true);
     }

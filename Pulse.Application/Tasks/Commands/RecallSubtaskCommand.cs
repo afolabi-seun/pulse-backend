@@ -22,9 +22,7 @@ public class RecallSubtaskHandler : IRequestHandler<RecallSubtaskCommand, Servic
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public RecallSubtaskHandler(
@@ -33,9 +31,7 @@ public class RecallSubtaskHandler : IRequestHandler<RecallSubtaskCommand, Servic
         IEngineerRepository engineers,
         ITeamRepository teams,
         IAuditLogRepository audit,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings)
     {
         _tasks = tasks;
@@ -43,9 +39,7 @@ public class RecallSubtaskHandler : IRequestHandler<RecallSubtaskCommand, Servic
         _engineers = engineers;
         _teams = teams;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -99,18 +93,12 @@ public class RecallSubtaskHandler : IRequestHandler<RecallSubtaskCommand, Servic
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because a subtask loaned to you was recalled.")}
                 """;
-            _emailQueue.Enqueue(borrower.Email, $"Subtask recalled: {subtask.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(borrower.Id, NotificationKind.SubtaskRecalled, new NotificationEmail(borrower.Email, $"Subtask recalled: {subtask.Title}", EmailTemplate.Layout(body)), ct);
         }
 
         return ServiceResult<SubtaskDto>.Ok(SubtaskDto.From(subtask));
     }
 
-    private async Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct)
-    {
-        var n = Notification.Create(userId, kind,
-            JsonSerializer.Serialize(payload), NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(userId, NotificationDto.From(n), ct);
-    }
+    private Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct) =>
+        _notify.NotifyAsync(userId, kind, payload, ct: ct);
 }

@@ -23,33 +23,27 @@ public class ConfirmQaRejectionHandler : IRequestHandler<ConfirmQaRejectionComma
 {
     private readonly ITaskRepository _tasks;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
     private readonly IProjectRepository _projects;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public ConfirmQaRejectionHandler(
         ITaskRepository tasks,
         IAuditLogRepository audit,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
         IEngineerRepository engineers,
         ITeamRepository teams,
         IProjectRepository projects,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
         _engineers = engineers;
         _teams = teams;
         _projects = projects;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -135,10 +129,7 @@ public class ConfirmQaRejectionHandler : IRequestHandler<ConfirmQaRejectionComma
                 routedToName   = routedTo?.Name,
             });
 
-            var n = Notification.Create(assigneeId, NotificationKind.QaRejected, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(assigneeId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(assigneeId, NotificationKind.QaRejected, payload, ct: ct);
 
             var engineer = await _engineers.GetByIdAsync(assigneeId, ct);
             if (engineer is not null)
@@ -158,17 +149,14 @@ public class ConfirmQaRejectionHandler : IRequestHandler<ConfirmQaRejectionComma
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you are the assignee of this task.")}
                     """;
-                _emailQueue.Enqueue(engineer.Email, $"QA rejected: {parentTask.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(engineer.Id, NotificationKind.QaRejected, new NotificationEmail(engineer.Email, $"QA rejected: {parentTask.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 
         if (routedTo is not null && routedTo.Id != cmd.ActorId)
         {
             var payload = JsonSerializer.Serialize(new { taskId = parentTask.Id, taskTitle = parentTask.Title });
-            var n = Notification.Create(routedTo.Id, NotificationKind.TaskAssigned, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(routedTo.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(routedTo.Id, NotificationKind.TaskAssigned, payload, ct: ct);
 
             var taskLink = $"{_settings.AppBaseUrl}/tasks/{parentTask.Id}";
             var body = $"""
@@ -178,7 +166,7 @@ public class ConfirmQaRejectionHandler : IRequestHandler<ConfirmQaRejectionComma
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because you were handed off this task's backend work.")}
                 """;
-            _emailQueue.Enqueue(routedTo.Email, $"Task routed to you: {parentTask.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(routedTo.Id, NotificationKind.TaskAssigned, new NotificationEmail(routedTo.Email, $"Task routed to you: {parentTask.Title}", EmailTemplate.Layout(body)), ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(parentTask, reactivatedByName: confirmer?.Name));

@@ -53,16 +53,14 @@ public class UpdateTaskHandler : IRequestHandler<UpdateTaskCommand, ServiceResul
     private readonly IAuditLogRepository _audit;
     private readonly IEscalationEventRepository _escalationEvents;
     private readonly IEpicRepository _epics;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
     private readonly ITaskDependencyRepository _dependencies;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
     private readonly IProjectAccessPolicy _access;
     private readonly IProjectRepository _projects;
     private readonly ISprintRepository _sprints;
     private readonly ICheckInRepository _checkIns;
     private readonly ITeamRepository _teams;
+    private readonly INotificationDispatcher _notify;
 
     public UpdateTaskHandler(
         ITaskRepository tasks,
@@ -70,26 +68,22 @@ public class UpdateTaskHandler : IRequestHandler<UpdateTaskCommand, ServiceResul
         IAuditLogRepository audit,
         IEscalationEventRepository escalationEvents,
         IEpicRepository epics,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
         ITaskDependencyRepository dependencies,
-        IEmailQueue emailQueue,
         IAppSettings settings,
         IProjectAccessPolicy access,
         IProjectRepository projects,
         ISprintRepository sprints,
         ICheckInRepository checkIns,
-        ITeamRepository teams)
+        ITeamRepository teams,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _engineers = engineers;
         _audit = audit;
         _escalationEvents = escalationEvents;
         _epics = epics;
-        _notifications = notifications;
-        _realtime = realtime;
         _dependencies = dependencies;
-        _emailQueue = emailQueue;
         _settings = settings;
         _access = access;
         _projects = projects;
@@ -331,7 +325,7 @@ public class UpdateTaskHandler : IRequestHandler<UpdateTaskCommand, ServiceResul
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you are the assignee of this task.")}
                     """;
-                _emailQueue.Enqueue(qaParentEngineer.Email, $"QA passed: {qaAcceptedParent.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(qaParentEngineer.Id, NotificationKind.QaAccepted, new NotificationEmail(qaParentEngineer.Email, $"QA passed: {qaAcceptedParent.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 
@@ -376,19 +370,13 @@ public class UpdateTaskHandler : IRequestHandler<UpdateTaskCommand, ServiceResul
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you were assigned to this task.")}
                     """;
-                _emailQueue.Enqueue(newAssignee.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(newAssignee.Id, NotificationKind.TaskAssigned, new NotificationEmail(newAssignee.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));
     }
 
-    private async Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct)
-    {
-        var n = Notification.Create(userId, kind,
-            JsonSerializer.Serialize(payload), NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(userId, NotificationDto.From(n), ct);
-    }
+    private Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct) =>
+        _notify.NotifyAsync(userId, kind, payload, ct: ct);
 }

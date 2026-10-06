@@ -27,30 +27,24 @@ public class ProposeQaRejectionHandler : IRequestHandler<ProposeQaRejectionComma
 {
     private readonly ITaskRepository _tasks;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public ProposeQaRejectionHandler(
         ITaskRepository tasks,
         IAuditLogRepository audit,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
         IEngineerRepository engineers,
         ITeamRepository teams,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
         _engineers = engineers;
         _teams = teams;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -101,10 +95,7 @@ public class ProposeQaRejectionHandler : IRequestHandler<ProposeQaRejectionComma
                 proposedBy = proposer?.Name,
             });
 
-            var n = Notification.Create(assigneeId, NotificationKind.QaRejectionProposed, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(assigneeId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(assigneeId, NotificationKind.QaRejectionProposed, payload, ct: ct);
 
             var engineer = await _engineers.GetByIdAsync(assigneeId, ct);
             if (engineer is not null)
@@ -121,7 +112,7 @@ public class ProposeQaRejectionHandler : IRequestHandler<ProposeQaRejectionComma
                     {EmailTemplate.Button(taskLink, "Respond")}
                     {EmailTemplate.Muted("This notification was sent because you are the assignee of this task.")}
                     """;
-                _emailQueue.Enqueue(engineer.Email, $"QA raised a concern: {parentTask.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(engineer.Id, NotificationKind.QaRejectionProposed, new NotificationEmail(engineer.Email, $"QA raised a concern: {parentTask.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

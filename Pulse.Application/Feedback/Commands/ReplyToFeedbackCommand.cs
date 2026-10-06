@@ -31,23 +31,18 @@ public class ReplyToFeedbackHandler : IRequestHandler<ReplyToFeedbackCommand, Se
     private readonly IFeedbackRepository _feedback;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
     private readonly IAuditLogRepository _auditLog;
 
     public ReplyToFeedbackHandler(
         IFeedbackRepository feedback, IEngineerRepository engineers, ITeamRepository teams,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue,
-        IAppSettings settings, IAuditLogRepository auditLog)
+        INotificationDispatcher notify, IAppSettings settings, IAuditLogRepository auditLog)
     {
         _feedback = feedback;
         _engineers = engineers;
         _teams = teams;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
         _auditLog = auditLog;
     }
@@ -89,10 +84,7 @@ public class ReplyToFeedbackHandler : IRequestHandler<ReplyToFeedbackCommand, Se
 
         var replier = await _engineers.GetByIdAsync(cmd.ActorId, ct);
         var payload = JsonSerializer.Serialize(new { feedbackId = entry.Id, repliedByName = replier?.Name, replyText = cmd.Text });
-        var n = Notification.Create(entry.EngineerId, NotificationKind.FeedbackReplied, payload, NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(entry.EngineerId, NotificationDto.From(n), ct);
+        await _notify.NotifyAsync(entry.EngineerId, NotificationKind.FeedbackReplied, payload, ct: ct);
 
         var submitterEngineer = await _engineers.GetByIdAsync(entry.EngineerId, ct);
         if (submitterEngineer is not null)
@@ -107,7 +99,7 @@ public class ReplyToFeedbackHandler : IRequestHandler<ReplyToFeedbackCommand, Se
                 {EmailTemplate.Button(feedbackLink, "Submit more feedback")}
                 {EmailTemplate.Muted("This reply is private — only you and department heads who can see this feedback know about it.")}
                 """;
-            _emailQueue.Enqueue(submitterEngineer.Email, "You received a reply to your feedback", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(submitterEngineer.Id, NotificationKind.FeedbackReplied, new NotificationEmail(submitterEngineer.Email, "You received a reply to your feedback", EmailTemplate.Layout(body)), ct);
         }
 
         return ServiceResult<FeedbackDto>.Ok(FeedbackDto.From(entry, replier?.Name));

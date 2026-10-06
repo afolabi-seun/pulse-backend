@@ -17,22 +17,22 @@ public class ApprovePrApprovalHandler : IRequestHandler<ApprovePrApprovalCommand
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public ApprovePrApprovalHandler(
-        ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams, IAuditLogRepository audit,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings)
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAuditLogRepository audit,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -69,10 +69,7 @@ public class ApprovePrApprovalHandler : IRequestHandler<ApprovePrApprovalCommand
         {
             var approver = await _engineers.GetByIdAsync(cmd.ActorId, ct);
             var payload = JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title, approvedByName = approver?.Name });
-            var n = Notification.Create(submitterId, NotificationKind.PrApprovalApproved, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(submitterId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(submitterId, NotificationKind.PrApprovalApproved, payload, ct: ct);
 
             var submitter = await _engineers.GetByIdAsync(submitterId, ct);
             if (submitter is not null)
@@ -84,7 +81,7 @@ public class ApprovePrApprovalHandler : IRequestHandler<ApprovePrApprovalCommand
                     <strong>{task.Title}</strong> — it's ready to be marked done.</p>
                     {EmailTemplate.Button(taskLink, "View task")}
                     """;
-                _emailQueue.Enqueue(submitter.Email, $"PR approved: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(submitter.Id, NotificationKind.PrApprovalApproved, new NotificationEmail(submitter.Email, $"PR approved: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

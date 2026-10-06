@@ -5,6 +5,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -27,7 +28,7 @@ public class RecallTaskHandlerTests
 
     private RecallTaskHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _teams.Object, _audit.Object, _escalationEvents.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     [Fact]
     public async Task Rejects_recalling_a_task_that_was_never_loaned()

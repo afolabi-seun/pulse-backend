@@ -8,6 +8,7 @@ using Pulse.Domain.Notifications;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Escalations;
 
@@ -34,7 +35,7 @@ public class EscalationScannerTests
     }
 
     private EscalationScanner CreateScanner() =>
-        new(_tasks.Object, _events.Object, _emailQueue.Object, _engineers.Object, _teams.Object, _notifications.Object, _realtime.Object, _thresholds, _access.Object);
+        new(_tasks.Object, _events.Object, _engineers.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _thresholds, _access.Object);
 
     private static PulseTask ShortTask(DateOnly dueDate)
     {
