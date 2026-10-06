@@ -13,7 +13,7 @@ namespace Pulse.Application.Overwork;
 /// rolled-up count rather than a per-engineer list, so they aren't paged for cases the team
 /// lead/PM already own.
 /// </summary>
-public class OverworkDigestJob
+public class OverworkDigestJob : IRecurringJob
 {
     private readonly IEngineerRepository _engineers;
     private readonly IOverworkOverrideRepository _overrides;

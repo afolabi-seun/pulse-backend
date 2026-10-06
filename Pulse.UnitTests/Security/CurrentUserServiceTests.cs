@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Pulse.Api.Security;
 using Pulse.Application.Auth;
+using Pulse.Application.Common.Interfaces;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Moq;
@@ -11,10 +12,10 @@ public class CurrentUserServiceTests
 {
     private readonly Mock<IHttpContextAccessor> _accessor = new();
 
-    private CurrentUserService Create(HttpContext? ctx)
+    private CurrentUserService Create(HttpContext? ctx, Guid? backgroundOrg = null)
     {
         _accessor.Setup(a => a.HttpContext).Returns(ctx);
-        return new CurrentUserService(_accessor.Object);
+        return new CurrentUserService(_accessor.Object, new BackgroundOrganizationContext { OrganizationId = backgroundOrg });
     }
 
     [Fact]
@@ -71,4 +72,43 @@ public class CurrentUserServiceTests
 
     private static DefaultHttpContext Authenticated(params Claim[] claims) =>
         new() { User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "Test")) };
+
+    [Fact]
+    public void Background_work_run_for_an_organization_reports_that_organization()
+    {
+        var orgId = Guid.NewGuid();
+
+        var user = Create(null, backgroundOrg: orgId);
+
+        user.IsAuthenticated.Should().BeFalse();
+        user.OrganizationId.Should().Be(orgId);
+    }
+
+    [Fact]
+    public void An_authenticated_callers_own_organization_wins_over_any_background_one()
+    {
+        var callerOrg = Guid.NewGuid();
+        var user = Create(Authenticated(new Claim(PulseClaimTypes.OrganizationId, callerOrg.ToString())),
+            backgroundOrg: Guid.NewGuid());
+
+        user.OrganizationId.Should().Be(callerOrg);
+    }
+
+    [Fact]
+    public void A_service_token_is_a_service_caller_not_an_authenticated_user()
+    {
+        var user = Create(Authenticated(new Claim("serviceId", "scheduler")));
+
+        user.IsServiceCaller.Should().BeTrue();
+        user.IsAuthenticated.Should().BeFalse("a service token has no user, so it mustn't be org-filtered as a user with no org");
+        user.UserId.Should().BeNull();
+        user.OrganizationId.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_user_token_is_not_a_service_caller()
+    {
+        Create(Authenticated(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())))
+            .IsServiceCaller.Should().BeFalse();
+    }
 }
