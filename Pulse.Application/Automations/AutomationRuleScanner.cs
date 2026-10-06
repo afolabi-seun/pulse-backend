@@ -11,7 +11,7 @@ namespace Pulse.Application.Automations;
 /// ThresholdDays and reassigns them to the team's lead. The one real action this feature takes —
 /// see AutomationRule's own doc comment for why it's fixed to this single action rather than a
 /// selectable type.</summary>
-public class AutomationRuleScanner
+public class AutomationRuleScanner : IRecurringJob
 {
     private readonly IAutomationRuleRepository _rules;
     private readonly ITaskRepository _tasks;

@@ -43,6 +43,7 @@ public static class ServiceCollectionExtensions
         // RLS identity plumbing: the interceptor stamps app.current_role / app.current_user_id
         // onto every connection so Postgres row-level security policies can see the caller.
         services.AddHttpContextAccessor();
+        services.AddScoped<BackgroundOrganizationContext>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IRlsContext, HttpRlsContext>();
         services.AddScoped<RlsConnectionInterceptor>();
@@ -192,6 +193,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHangfireServer();
 
+        services.AddScoped(typeof(OrganizationJobRunner<>));
         services.AddScoped<EscalationScanner>();
         services.AddScoped<EstimateApprovalEscalationScanner>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
