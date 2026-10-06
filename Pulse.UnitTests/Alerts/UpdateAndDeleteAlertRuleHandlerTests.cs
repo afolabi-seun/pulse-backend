@@ -10,7 +10,10 @@ public class UpdateAlertRuleHandlerTests
 {
     private readonly Mock<IAlertRuleRepository> _rules = new();
 
-    private UpdateAlertRuleHandler CreateHandler() => new(_rules.Object);
+    // No organization set: the default org, where Slack/Google Chat delivery is available.
+    private readonly Mock<ICurrentUserService> _currentUser = new();
+
+    private UpdateAlertRuleHandler CreateHandler() => new(_rules.Object, _currentUser.Object);
 
     private static AlertRule NewRule(Guid owner) =>
         AlertRule.Create(owner, "Original", AlertMetric.BlockerCount, AlertScopeType.Team, Guid.NewGuid(),
