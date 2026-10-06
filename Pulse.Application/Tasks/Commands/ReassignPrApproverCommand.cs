@@ -19,24 +19,24 @@ public class ReassignPrApproverHandler : IRequestHandler<ReassignPrApproverComma
     private readonly ITeamRepository _teams;
     private readonly IProjectRepository _projects;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public ReassignPrApproverHandler(
-        ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams, IProjectRepository projects,
-        IAuditLogRepository audit, INotificationRepository notifications, IRealtimeNotifier realtime,
-        IEmailQueue emailQueue, IAppSettings settings)
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IProjectRepository projects,
+        IAuditLogRepository audit,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _projects = projects;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -85,10 +85,7 @@ public class ReassignPrApproverHandler : IRequestHandler<ReassignPrApproverComma
             taskId = task.Id, taskTitle = task.Title,
             prLink = task.PrLink, reassignedByName = reassignedBy?.Name,
         });
-        var n = Notification.Create(cmd.NewApproverId, NotificationKind.PrApprovalReassigned, payload, NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(cmd.NewApproverId, NotificationDto.From(n), ct);
+        await _notify.NotifyAsync(cmd.NewApproverId, NotificationKind.PrApprovalReassigned, payload, ct: ct);
 
         var taskLink = $"{_settings.AppBaseUrl}/tasks/{task.Id}";
         var body = $"""
@@ -99,7 +96,7 @@ public class ReassignPrApproverHandler : IRequestHandler<ReassignPrApproverComma
             {EmailTemplate.Button(taskLink, "Review task")}
             {EmailTemplate.Muted("This notification was sent because a PR approval request was reassigned to you.")}
             """;
-        _emailQueue.Enqueue(newApprover.Email, $"PR approval reassigned to you: {task.Title}", EmailTemplate.Layout(body));
+        await _notify.EmailAsync(newApprover.Id, NotificationKind.PrApprovalReassigned, new NotificationEmail(newApprover.Email, $"PR approval reassigned to you: {task.Title}", EmailTemplate.Layout(body)), ct);
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));
     }

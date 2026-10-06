@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -29,7 +30,7 @@ public class ReturnTaskToBacklogHandlerTests
 
     private ReturnTaskToBacklogHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _teams.Object, _audit.Object, _access.Object,
-            _notifications.Object, _realtime.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime));
 
     private static PulseTask ActiveTask(Guid assigneeId)
     {

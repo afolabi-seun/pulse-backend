@@ -1,5 +1,6 @@
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Notifications;
 using Pulse.Domain.Notifications;
 
 namespace Pulse.Application.Vitals;
@@ -7,19 +8,16 @@ namespace Pulse.Application.Vitals;
 public class WeeklyVitalsPromptJob : IRecurringJob
 {
     private readonly IEngineerRepository _engineers;
-    private readonly INotificationRepository _notifications;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public WeeklyVitalsPromptJob(
         IEngineerRepository engineers,
-        INotificationRepository notifications,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _engineers = engineers;
-        _notifications = notifications;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -30,9 +28,6 @@ public class WeeklyVitalsPromptJob : IRecurringJob
 
         foreach (var engineer in engineers)
         {
-            await _notifications.AddAsync(
-                Notification.Create(engineer.Id, NotificationKind.WeeklyVitalsPrompt), ct);
-
             var body = $"""
                 <p>Hi {engineer.Name},</p>
                 <p>It's Friday! Please take 30 seconds to submit your weekly vitals in Pulse.</p>
@@ -40,9 +35,8 @@ public class WeeklyVitalsPromptJob : IRecurringJob
                 {EmailTemplate.Muted("Your response is confidential — only department heads can see it.")}
                 {EmailTemplate.Button(link, "Submit your vitals")}
                 """;
-            _emailQueue.Enqueue(engineer.Email, "Weekly vitals — how are you doing?", EmailTemplate.Layout(body));
+            await _notify.NotifyAsync(engineer.Id, NotificationKind.WeeklyVitalsPrompt, null,
+                new NotificationEmail(engineer.Email, "Weekly vitals — how are you doing?", EmailTemplate.Layout(body)), ct);
         }
-
-        await _notifications.SaveChangesAsync(ct);
     }
 }

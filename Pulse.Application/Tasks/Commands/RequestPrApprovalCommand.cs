@@ -18,24 +18,24 @@ public class RequestPrApprovalHandler : IRequestHandler<RequestPrApprovalCommand
     private readonly ITeamRepository _teams;
     private readonly IProjectAccessPolicy _access;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public RequestPrApprovalHandler(
-        ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams, IProjectAccessPolicy access,
-        IAuditLogRepository audit, INotificationRepository notifications, IRealtimeNotifier realtime,
-        IEmailQueue emailQueue, IAppSettings settings)
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IProjectAccessPolicy access,
+        IAuditLogRepository audit,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _access = access;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -91,10 +91,7 @@ public class RequestPrApprovalHandler : IRequestHandler<RequestPrApprovalCommand
                 requestedByName = requester?.Name,
             });
 
-            var n = Notification.Create(head.Id, NotificationKind.PrApprovalRequested, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(head.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(head.Id, NotificationKind.PrApprovalRequested, payload, ct: ct);
 
             var body = $"""
                 <p>Hi {head.Name},</p>
@@ -104,7 +101,7 @@ public class RequestPrApprovalHandler : IRequestHandler<RequestPrApprovalCommand
                 {EmailTemplate.Button(taskLink, "Review task")}
                 {EmailTemplate.Muted("This notification was sent because you are the head of this engineer's department.")}
                 """;
-            _emailQueue.Enqueue(head.Email, $"PR approval needed: {task.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(head.Id, NotificationKind.PrApprovalRequested, new NotificationEmail(head.Email, $"PR approval needed: {task.Title}", EmailTemplate.Layout(body)), ct);
         }
     }
 }

@@ -7,6 +7,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 using DomainTaskStatus = Pulse.Domain.Tasks.TaskStatus;
 
 namespace Pulse.UnitTests.Tasks;
@@ -29,8 +30,8 @@ public class ConfirmQaRejectionHandlerTests
     }
 
     private ConfirmQaRejectionHandler CreateHandler() =>
-        new(_tasks.Object, _audit.Object, _notifications.Object, _realtime.Object,
-            _engineers.Object, _teams.Object, _projects.Object, _emailQueue.Object, _settings.Object);
+        new(_tasks.Object, _audit.Object, _engineers.Object, _teams.Object, _projects.Object, _settings.Object,
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private static (PulseTask Parent, PulseTask Qa) PendingRejectionPair(Guid reviewerId, string reason = "Not good enough", TaskStage? targetStage = null)
     {

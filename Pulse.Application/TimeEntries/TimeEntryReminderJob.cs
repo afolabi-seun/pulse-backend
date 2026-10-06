@@ -1,6 +1,8 @@
 using Pulse.Application.Auth;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Notifications;
+using Pulse.Domain.Notifications;
 
 namespace Pulse.Application.TimeEntries;
 
@@ -13,18 +15,18 @@ public class TimeEntryReminderJob : IRecurringJob
 {
     private readonly ITimeEntryRepository _timeEntries;
     private readonly IEngineerRepository _engineers;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public TimeEntryReminderJob(
         ITimeEntryRepository timeEntries,
         IEngineerRepository engineers,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _timeEntries = timeEntries;
         _engineers = engineers;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -53,7 +55,7 @@ public class TimeEntryReminderJob : IRecurringJob
                 {EmailTemplate.Button(link, "Log your time")}
                 """;
 
-            _emailQueue.Enqueue(engineer.Email, "Pulse — weekly time log reminder", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(engineer.Id, NotificationKind.TimeEntryReminder, new NotificationEmail(engineer.Email, "Pulse — weekly time log reminder", EmailTemplate.Layout(body)), ct);
         }
     }
 }

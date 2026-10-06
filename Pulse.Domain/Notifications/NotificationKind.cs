@@ -3,6 +3,8 @@ namespace Pulse.Domain.Notifications;
 public static class NotificationKind
 {
     public const string CheckInReminder    = "checkin_reminder";
+    /// <summary>The Friday email reminding people who haven't logged hours this week. Email only.</summary>
+    public const string TimeEntryReminder  = "time_entry_reminder";
     public const string EscalationT3      = "escalation_t3";
     public const string EscalationT1      = "escalation_t1";
     public const string EscalationOverdue = "escalation_overdue";

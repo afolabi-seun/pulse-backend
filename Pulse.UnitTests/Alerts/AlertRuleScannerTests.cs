@@ -4,6 +4,7 @@ using Pulse.Domain.Alerts;
 using Pulse.Domain.Engineers;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Alerts;
 
@@ -44,7 +45,7 @@ public class AlertRuleScannerTests
 
     private AlertRuleScanner CreateScanner() =>
         new(_rules.Object, _metrics.Object, _engineers.Object, _teams.Object, _projects.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _webhookNotifier.Object, _explainer.Object,
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _webhookNotifier.Object, _explainer.Object,
             _slackClient.Object, _conversations.Object, _googleChatMessenger.Object, _googleChatThreads.Object);
 
     private static AlertRule NewRule(Guid owner, AlertComparator comparator = AlertComparator.GreaterThan, double threshold = 5,

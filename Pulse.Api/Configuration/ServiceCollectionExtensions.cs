@@ -11,6 +11,7 @@ using Pulse.Application.Common.Interfaces;
 using Pulse.Application.CheckIns;
 using Pulse.Application.Escalations;
 using Pulse.Application.Estimation;
+using Pulse.Application.Notifications;
 using Pulse.Application.Overwork;
 using Pulse.Application.Vitals;
 using Pulse.Application.TimeEntries;
@@ -72,6 +73,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITimeEntryRepository, TimeEntryRepository>();
         services.AddScoped<IActiveTimerRepository, ActiveTimerRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<INotificationPreferenceRepository, NotificationPreferenceRepository>();
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.AddScoped<IEscalationEventRepository, EscalationEventRepository>();
         services.AddScoped<IOverworkOverrideRepository, OverworkOverrideRepository>();
         services.AddScoped<IFeedbackRepository, FeedbackRepository>();

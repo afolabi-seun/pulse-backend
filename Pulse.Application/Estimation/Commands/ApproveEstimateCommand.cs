@@ -16,22 +16,22 @@ public class ApproveEstimateHandler : IRequestHandler<ApproveEstimateCommand, Se
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public ApproveEstimateHandler(
-        IEstimationRepository estimation, ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings)
+        IEstimationRepository estimation,
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _estimation = estimation;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -59,10 +59,7 @@ public class ApproveEstimateHandler : IRequestHandler<ApproveEstimateCommand, Se
         {
             var approver = await _engineers.GetByIdAsync(request.ActorId, ct);
             var payload = JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title, points, approvedByName = approver?.Name });
-            var n = Notification.Create(submittedBy, NotificationKind.EstimateApproved, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(submittedBy, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(submittedBy, NotificationKind.EstimateApproved, payload, ct: ct);
 
             var submitter = await _engineers.GetByIdAsync(submittedBy, ct);
             if (submitter is not null)
@@ -74,7 +71,7 @@ public class ApproveEstimateHandler : IRequestHandler<ApproveEstimateCommand, Se
                     <strong>{points} pts</strong> for <strong>{task.Title}</strong> — it's now set on the task.</p>
                     {EmailTemplate.Button(taskLink, "View task")}
                     """;
-                _emailQueue.Enqueue(submitter.Email, $"Estimate approved: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(submitter.Id, NotificationKind.EstimateApproved, new NotificationEmail(submitter.Email, $"Estimate approved: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

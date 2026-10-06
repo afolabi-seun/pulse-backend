@@ -21,22 +21,22 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public SubmitEstimateForApprovalHandler(
-        IEstimationRepository estimation, ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings)
+        IEstimationRepository estimation,
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _estimation = estimation;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -108,10 +108,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
                 submittedByName = submitter?.Name,
             });
 
-            var n = Notification.Create(approver.Id, NotificationKind.EstimateApprovalRequested, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(approver.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(approver.Id, NotificationKind.EstimateApprovalRequested, payload, ct: ct);
 
             var body = $"""
                 <p>Hi {approver.Name},</p>
@@ -121,7 +118,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
                 {EmailTemplate.Button(taskLink, "Review estimate")}
                 {EmailTemplate.Muted($"This notification was sent because you are {roleLabel} for this task's assignee.")}
                 """;
-            _emailQueue.Enqueue(approver.Email, $"Estimate approval needed: {task.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(approver.Id, NotificationKind.EstimateApprovalRequested, new NotificationEmail(approver.Email, $"Estimate approval needed: {task.Title}", EmailTemplate.Layout(body)), ct);
         }
     }
 }

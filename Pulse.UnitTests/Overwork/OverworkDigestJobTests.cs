@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Overwork;
 
@@ -31,7 +32,7 @@ public class OverworkDigestJobTests
     }
 
     private OverworkDigestJob CreateJob() =>
-        new(_engineers.Object, _overrides.Object, _calculator, _teams.Object, _departmentThresholds.Object, _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+        new(_engineers.Object, _overrides.Object, _calculator, _teams.Object, _departmentThresholds.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     private static Engineer NewEngineer(string name, int baselinePoints = 20) =>
         Engineer.Create(name, $"{name.Replace(" ", ".").ToLower()}@pulse.io", "pw", Roles.Engineer, baselinePoints, 14);

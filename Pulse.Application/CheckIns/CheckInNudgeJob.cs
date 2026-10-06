@@ -1,5 +1,7 @@
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Notifications;
+using Pulse.Domain.Notifications;
 
 namespace Pulse.Application.CheckIns;
 
@@ -10,18 +12,18 @@ public class CheckInNudgeJob : IRecurringJob
 {
     private readonly ICheckInRepository _checkIns;
     private readonly IEngineerRepository _engineers;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public CheckInNudgeJob(
         ICheckInRepository checkIns,
         IEngineerRepository engineers,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _checkIns = checkIns;
         _engineers = engineers;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -70,7 +72,7 @@ public class CheckInNudgeJob : IRecurringJob
                     """;
             }
 
-            _emailQueue.Enqueue(engineer.Email, subject, EmailTemplate.Layout(body));
+            await _notify.EmailAsync(engineer.Id, NotificationKind.CheckInReminder, new NotificationEmail(engineer.Email, subject, EmailTemplate.Layout(body)), ct);
         }
     }
 }

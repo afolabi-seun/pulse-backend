@@ -16,22 +16,22 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public RejectEstimateHandler(
-        IEstimationRepository estimation, ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings)
+        IEstimationRepository estimation,
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _estimation = estimation;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -67,10 +67,7 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
                 taskId = task.Id, taskTitle = task.Title, points,
                 rejectedByName = rejector?.Name, reason = request.Reason,
             });
-            var n = Notification.Create(submittedBy, NotificationKind.EstimateRejected, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(submittedBy, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(submittedBy, NotificationKind.EstimateRejected, payload, ct: ct);
 
             var submitter = await _engineers.GetByIdAsync(submittedBy, ct);
             if (submitter is not null)
@@ -88,7 +85,7 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
                     {reasonHtml}
                     {EmailTemplate.Button(taskLink, "View task")}
                     """;
-                _emailQueue.Enqueue(submitter.Email, $"Estimate rejected: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(submitter.Id, NotificationKind.EstimateRejected, new NotificationEmail(submitter.Email, $"Estimate rejected: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

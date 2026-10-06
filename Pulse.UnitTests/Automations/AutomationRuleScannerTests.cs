@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Automations;
 
@@ -33,7 +34,7 @@ public class AutomationRuleScannerTests
 
     private AutomationRuleScanner CreateScanner() =>
         new(_rules.Object, _tasks.Object, _engineers.Object, _teams.Object, _executions.Object,
-            _audit.Object, _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            _audit.Object, _settings.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private static void SetActivatedAt(PulseTask task, DateTime value)
     {

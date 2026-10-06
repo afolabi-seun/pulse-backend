@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks.PrApproval;
 
@@ -30,7 +31,7 @@ public class ReassignPrApproverHandlerTests
 
     private ReassignPrApproverHandler CreateHandler() => new(
         _tasks.Object, _engineers.Object, _teams.Object, _projects.Object, _audit.Object,
-        _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+        _settings.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private (Engineer assignee, Engineer head, PulseTask task) SetUpPendingRequest()
     {

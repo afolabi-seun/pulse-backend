@@ -8,6 +8,7 @@ using Pulse.Application.Common;
 using Pulse.Application.Notifications;
 using Pulse.Application.Notifications.Commands;
 using Pulse.Application.Notifications.Queries;
+using Pulse.Application.Notifications.Preferences;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -67,6 +68,22 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CleanupOrphanedEscalations() =>
         (await _mediator.Send(new CleanupOrphanedEscalationNotificationsCommand())).ToActionResult();
+
+    public record UpdatePreferenceRequest(bool Email);
+
+    /// <summary>The caller's notification preferences: every kind, and whether it's emailed to them.</summary>
+    [HttpGet("preferences")]
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<NotificationPreferenceDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPreferences(CancellationToken ct) =>
+        (await _mediator.Send(new GetNotificationPreferencesQuery(GetActorId()), ct)).ToActionResult();
+
+    /// <summary>Turns email on or off for one notification kind (security notices stay on).</summary>
+    [HttpPut("preferences/{kind}")]
+    [ProducesResponseType(typeof(ApiResponse<NotificationPreferenceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdatePreference(string kind, [FromBody] UpdatePreferenceRequest request, CancellationToken ct) =>
+        (await _mediator.Send(new UpdateNotificationPreferenceCommand(GetActorId(), kind, request.Email), ct)).ToActionResult();
 
     /// <summary>Creates a notification. Internal use only — called by background jobs and event handlers.</summary>
     [HttpPost]

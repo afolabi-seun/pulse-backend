@@ -8,6 +8,7 @@ using Pulse.Domain.Engineers;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -43,7 +44,7 @@ public class SendToQaHandlerTests
 
     private SendToQaHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _projects.Object, _teams.Object, _audit.Object, _access.Object, _thresholds,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object, _checkIns.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object, _checkIns.Object);
 
     private static PulseTask ReadyForQaTask(Discipline? discipline = null)
     {

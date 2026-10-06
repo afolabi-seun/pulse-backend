@@ -6,6 +6,7 @@ using Pulse.Domain.Engineers;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -32,7 +33,7 @@ public class HandOffToFrontendHandlerTests
 
     private HandOffToFrontendHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _projects.Object, _audit.Object, _access.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object, _checkIns.Object);
+            _settings.Object, _checkIns.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private static PulseTask FlaggedTask(Guid backendDev)
     {

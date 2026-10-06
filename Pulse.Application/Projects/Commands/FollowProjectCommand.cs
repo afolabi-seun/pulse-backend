@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Notifications;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Notifications;
 using Pulse.Domain.Projects;
@@ -16,22 +17,22 @@ public class FollowProjectHandler : IRequestHandler<FollowProjectCommand, Servic
     private readonly IProjectFollowRepository _follows;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
     private readonly IAuditLogRepository _audit;
+    private readonly INotificationDispatcher _notify;
 
     public FollowProjectHandler(
         IProjectRepository projects,
         IProjectFollowRepository follows,
         IEngineerRepository engineers,
         ITeamRepository teams,
-        INotificationRepository notifications,
-        IAuditLogRepository audit)
+        IAuditLogRepository audit,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _projects      = projects;
         _follows       = follows;
         _engineers     = engineers;
         _teams         = teams;
-        _notifications = notifications;
         _audit         = audit;
     }
 
@@ -69,15 +70,7 @@ public class FollowProjectHandler : IRequestHandler<FollowProjectCommand, Servic
         var teamLeadIds = await _follows.GetTeamLeadIdsForProjectAsync(cmd.ProjectId, ct);
         var payload = JsonSerializer.Serialize(new { followerName = follower.Name, projectName = project.Name });
         foreach (var leadId in teamLeadIds)
-        {
-            await _notifications.AddAsync(Notification.Create(
-                leadId,
-                "PROJECT_FOLLOW_STARTED",
-                payload), ct);
-        }
-
-        if (teamLeadIds.Count > 0)
-            await _notifications.SaveChangesAsync(ct);
+            await _notify.NotifyAsync(leadId, NotificationCatalog.ProjectFollowStarted, payload, ct: ct);
 
         return ServiceResult<bool>.Ok(true);
     }

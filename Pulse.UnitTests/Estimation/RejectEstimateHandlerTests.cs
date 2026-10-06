@@ -6,6 +6,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Estimation;
 
@@ -29,7 +30,7 @@ public class RejectEstimateHandlerTests
 
     private RejectEstimateHandler CreateHandler() => new(
         _estimation.Object, _tasks.Object, _engineers.Object, _teams.Object,
-        _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+        _settings.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private (Engineer head, PulseTask task, TaskEstimationSession session, Guid submitterId) SetUpPendingEstimate(int points, int voteCount = 2)
     {
