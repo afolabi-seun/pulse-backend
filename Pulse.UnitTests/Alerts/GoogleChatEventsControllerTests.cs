@@ -1,3 +1,4 @@
+using Pulse.Application.Notifications.Preferences;
 using Pulse.Application.Integrations.GoogleChat;
 using Pulse.Application.Common;
 using MediatR;
@@ -155,5 +156,32 @@ public class GoogleChatEventsControllerTests
         await CreateController("good").Receive(MessageBody("can you link me to the dashboard?"), default);
 
         _mediator.Verify(m => m.Send(It.IsAny<LinkGoogleChatSpaceCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+    // ── Direct messages (personal notifications) ─────────────────────────────
+
+    [Theory]
+    [InlineData("ADDED_TO_SPACE")]
+    [InlineData("MESSAGE")]
+    public async Task An_event_in_a_direct_message_links_it_to_the_persons_account(string type)
+    {
+        _verifier.Setup(v => v.VerifyAsync("good", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _mediator.Setup(m => m.Send(It.IsAny<LinkGoogleChatDirectMessageCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ServiceResult<string>.Ok("Hi Ada!"));
+        var body = new JsonObject
+        {
+            ["type"] = type,
+            ["space"] = new JsonObject { ["name"] = "spaces/DM1", ["type"] = "DM" },
+            ["user"] = new JsonObject { ["email"] = "ada@acme.test" },
+            ["message"] = new JsonObject { ["text"] = "hello", ["thread"] = new JsonObject { ["name"] = "spaces/DM1/threads/1" } },
+        };
+
+        var result = await CreateController("good").Receive(body, default);
+
+        _mediator.Verify(m => m.Send(It.Is<LinkGoogleChatDirectMessageCommand>(c => c.Email == "ada@acme.test" && c.DmSpace == "spaces/DM1"),
+            It.IsAny<CancellationToken>()));
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(new { text = "Hi Ada!" });
+        _spaces.Verify(s => s.UpsertAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never,
+            "a DM isn't an organization space");
+        _jobs.Verify(j => j.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Never);
     }
 }

@@ -46,6 +46,21 @@ public class GoogleChatMessenger : IGoogleChatMessenger
             return null;
         }
 
+        return await SendAsync(spaceId, text, threadName, ct);
+    }
+
+    /// <summary>A person's direct-message space with Pulse, captured from their own ADDED_TO_SPACE event and
+    /// stored against their account (PersonalChatSettings) — so it's already bound to that one person and
+    /// isn't one of the shared spaces the organization check above is for.</summary>
+    public async Task<string?> PostToDirectMessageAsync(string dmSpace, string text, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(_settings.GoogleChatServiceAccountJson))
+            return null;
+        return await SendAsync(dmSpace, text, null, ct);
+    }
+
+    private async Task<string?> SendAsync(string spaceId, string text, string? threadName, CancellationToken ct)
+    {
         try
         {
             _credential ??= GoogleCredential.FromJson(_settings.GoogleChatServiceAccountJson).CreateScoped(Scope);

@@ -6,6 +6,7 @@ using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.RegularExpressions;
 using Pulse.Application.Integrations.GoogleChat;
+using Pulse.Application.Notifications.Preferences;
 using MediatR;
 
 namespace Pulse.Api.Controllers;
@@ -50,6 +51,14 @@ public class GoogleChatEventsController : ControllerBase
 
         var type = body["type"]?.GetValue<string>();
 
+        // A person's own direct message with Pulse: link it to their account for personal notifications.
+        // DMs aren't organization spaces, and nothing in one is an alert follow-up.
+        if (type is "ADDED_TO_SPACE" or "MESSAGE" && DirectMessageIn(body) is { } dm)
+        {
+            var reply = await _mediator.Send(new LinkGoogleChatDirectMessageCommand(dm.Email, dm.SpaceId), ct);
+            return Ok(new { text = reply.Data });
+        }
+
         if (type == "ADDED_TO_SPACE" && body["space"] is JsonObject space)
         {
             var spaceId = space["name"]?.GetValue<string>();
@@ -79,6 +88,18 @@ public class GoogleChatEventsController : ControllerBase
         // Chat accepts an empty JSON object as "no synchronous reply" — the real answer, if any,
         // arrives later as its own message via the REST API from HandleGoogleChatReplyJob.
         return Ok(new { });
+    }
+
+    private static (string SpaceId, string Email)? DirectMessageIn(JsonObject body)
+    {
+        if (body["space"] is not JsonObject space)
+            return null;
+        var isDm = space["type"]?.GetValue<string>() == "DM"
+            || space["spaceType"]?.GetValue<string>() == "DIRECT_MESSAGE"
+            || space["singleUserBotDm"]?.GetValue<bool>() == true;
+        var spaceId = space["name"]?.GetValue<string>();
+        var email = (body["user"] as JsonObject)?["email"]?.GetValue<string>();
+        return isDm && spaceId is not null && !string.IsNullOrWhiteSpace(email) ? (spaceId, email) : null;
     }
 
     private static (string SpaceId, string DisplayName, string Code)? LinkCodeIn(JsonObject body)

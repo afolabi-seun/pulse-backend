@@ -9,9 +9,10 @@ namespace Pulse.Application.Integrations.Slack;
 /// Slack workspace via OAuth; alerts and follow-up replies then go through that workspace's bot token.</summary>
 public static class SlackIntegrationConfig
 {
-    /// <summary>Bot scopes requested at install: post alerts (incl. public channels the bot hasn't joined)
-    /// and receive threaded replies in public and private channels.</summary>
-    public const string BotScopes = "chat:write,chat:write.public,channels:history,groups:history";
+    /// <summary>Bot scopes requested at install: post alerts (incl. public channels the bot hasn't joined),
+    /// receive threaded replies in public and private channels, and find people by email to send them their
+    /// personal notifications as direct messages.</summary>
+    public const string BotScopes = "chat:write,chat:write.public,channels:history,groups:history,users:read.email";
 
     public static bool IsConfigured(IAppSettings settings, ISecretProtector protector) =>
         !string.IsNullOrEmpty(settings.SlackClientId)

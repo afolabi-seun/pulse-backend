@@ -62,4 +62,31 @@ public class SlackClient : ISlackClient
             return null;
         }
     }
+
+    public async Task<string?> LookupUserIdByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var token = await _tokens.GetBotTokenAsync(ct);
+        if (string.IsNullOrEmpty(token))
+            return null;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://slack.com/api/users.lookupByEmail?email={Uri.EscapeDataString(email)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await _http.SendAsync(request, ct);
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            if (json?["ok"]?.GetValue<bool>() != true)
+            {
+                _logger.LogInformation("Slack users.lookupByEmail found no user: {Error}", json?["error"]?.GetValue<string>() ?? "unknown");
+                return null;
+            }
+            return json["user"]?["id"]?.GetValue<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Slack users.lookupByEmail threw");
+            return null;
+        }
+    }
 }

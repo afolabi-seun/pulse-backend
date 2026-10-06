@@ -69,7 +69,22 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> CleanupOrphanedEscalations() =>
         (await _mediator.Send(new CleanupOrphanedEscalationNotificationsCommand())).ToActionResult();
 
-    public record UpdatePreferenceRequest(bool Email);
+    /// <summary>Either or both; an omitted setting is left as it is.</summary>
+    public record UpdatePreferenceRequest(bool? Email, bool? Chat);
+    public record UpdateChatChannelRequest(string Channel);
+
+    /// <summary>Where the caller's notifications are also sent as personal chat messages, and what's available.</summary>
+    [HttpGet("chat")]
+    [ProducesResponseType(typeof(ApiResponse<PersonalChatSettingsDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChatSettings(CancellationToken ct) =>
+        (await _mediator.Send(new GetPersonalChatSettingsQuery(GetActorId()), ct)).ToActionResult();
+
+    /// <summary>Chooses the caller's personal chat channel: none, slack or google_chat.</summary>
+    [HttpPut("chat")]
+    [ProducesResponseType(typeof(ApiResponse<PersonalChatSettingsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateChatChannel([FromBody] UpdateChatChannelRequest request, CancellationToken ct) =>
+        (await _mediator.Send(new UpdatePersonalChatChannelCommand(GetActorId(), request.Channel), ct)).ToActionResult();
 
     /// <summary>The caller's notification preferences: every kind, and whether it's emailed to them.</summary>
     [HttpGet("preferences")]
@@ -83,7 +98,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> UpdatePreference(string kind, [FromBody] UpdatePreferenceRequest request, CancellationToken ct) =>
-        (await _mediator.Send(new UpdateNotificationPreferenceCommand(GetActorId(), kind, request.Email), ct)).ToActionResult();
+        (await _mediator.Send(new UpdateNotificationPreferenceCommand(GetActorId(), kind, request.Email, request.Chat), ct)).ToActionResult();
 
     /// <summary>Creates a notification. Internal use only — called by background jobs and event handlers.</summary>
     [HttpPost]

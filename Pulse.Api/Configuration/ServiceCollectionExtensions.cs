@@ -19,6 +19,7 @@ using Pulse.Infrastructure.BackgroundJobs;
 using Pulse.Infrastructure.DemoData;
 using Pulse.Infrastructure.Email;
 using Pulse.Infrastructure.Integrations;
+using Pulse.Infrastructure.Notifications;
 using Pulse.Infrastructure.Persistence;
 using Pulse.Infrastructure.AlertExplanations;
 using Pulse.Infrastructure.Persistence.Repositories;
@@ -75,6 +76,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INotificationPreferenceRepository, NotificationPreferenceRepository>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddScoped<IPersonalChatSettingsRepository, PersonalChatSettingsRepository>();
+        services.AddScoped<IChatNotificationQueue, HangfireChatNotificationQueue>();
+        services.AddScoped<SendChatNotificationJob>();
         services.AddScoped<IEscalationEventRepository, EscalationEventRepository>();
         services.AddScoped<IOverworkOverrideRepository, OverworkOverrideRepository>();
         services.AddScoped<IFeedbackRepository, FeedbackRepository>();
