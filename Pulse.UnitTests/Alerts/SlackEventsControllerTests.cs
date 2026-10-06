@@ -49,7 +49,7 @@ public class SlackEventsControllerTests
 
     private const string UrlVerificationBody = """{"type":"url_verification","challenge":"abc123","token":"xyz"}""";
 
-    private static string EventCallbackBody(string eventJson) => $$"""{"type":"event_callback","event":{{eventJson}}}""";
+    private static string EventCallbackBody(string eventJson) => $$"""{"type":"event_callback","team_id":"T999","event":{{eventJson}}}""";
 
     private const string ThreadedReplyEvent = """{"type":"message","channel":"C123","text":"why though?","thread_ts":"1700.001","ts":"1700.002"}""";
     private const string BotMessageEvent = """{"type":"message","channel":"C123","text":"an alert fired","thread_ts":"1700.001","ts":"1700.002","bot_id":"B999"}""";
@@ -122,9 +122,10 @@ public class SlackEventsControllerTests
         result.Should().BeOfType<OkResult>();
         _jobs.Verify(j => j.Create(
             It.Is<Job>(job => job.Method.Name == nameof(HandleSlackReplyJob.ExecuteAsync)
-                && (string)job.Args[0] == "C123"
-                && (string)job.Args[1] == "1700.001"
-                && (string)job.Args[2] == "why though?"),
+                && (string)job.Args[0] == "T999" // the workspace, which decides the organization
+                && (string)job.Args[1] == "C123"
+                && (string)job.Args[2] == "1700.001"
+                && (string)job.Args[3] == "why though?"),
             It.IsAny<IState>()), Times.Once);
     }
 

@@ -37,6 +37,10 @@ public class AppSettings : IAppSettings
     // ── Slack follow-up Q&A ──────────────────────────────────────────────────
     public string? SlackSigningSecret { get; init; }
     public string? SlackBotToken { get; init; }
+    public string? SlackClientId { get; init; }
+    public string? SlackClientSecret { get; init; }
+    public string? SlackOAuthRedirectUri { get; init; }
+    public string? IntegrationEncryptionKey { get; init; }
 
     // ── Google Chat follow-up Q&A ────────────────────────────────────────────
     public string? GoogleChatServiceAccountJson { get; init; }
@@ -71,6 +75,10 @@ public class AppSettings : IAppSettings
         AnthropicModel                  = Environment.GetEnvironmentVariable("ANTHROPIC_MODEL") ?? "claude-sonnet-5",
         SlackSigningSecret              = Environment.GetEnvironmentVariable("SLACK_SIGNING_SECRET"),
         SlackBotToken                   = Environment.GetEnvironmentVariable("SLACK_BOT_TOKEN"),
+        SlackClientId                   = Environment.GetEnvironmentVariable("SLACK_CLIENT_ID"),
+        SlackClientSecret               = Environment.GetEnvironmentVariable("SLACK_CLIENT_SECRET"),
+        SlackOAuthRedirectUri           = Environment.GetEnvironmentVariable("SLACK_OAUTH_REDIRECT_URI"),
+        IntegrationEncryptionKey        = Environment.GetEnvironmentVariable("INTEGRATION_ENCRYPTION_KEY"),
         GoogleChatServiceAccountJson    = Environment.GetEnvironmentVariable("GOOGLE_CHAT_SERVICE_ACCOUNT_JSON"),
         GoogleChatAudience              = Environment.GetEnvironmentVariable("GOOGLE_CHAT_AUDIENCE"),
     };

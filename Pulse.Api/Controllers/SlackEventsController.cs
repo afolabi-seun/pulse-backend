@@ -60,7 +60,9 @@ public class SlackEventsController : ControllerBase
             var channel = evt["channel"]!.GetValue<string>();
             var threadTs = evt["thread_ts"]!.GetValue<string>();
             var text = evt["text"]?.GetValue<string>() ?? "";
-            _jobs.Enqueue<HandleSlackReplyJob>(j => j.ExecuteAsync(channel, threadTs, text));
+            // Which workspace — and so which organization — the reply came from (multi-tenancy Phase 2b).
+            var teamId = body["team_id"]?.GetValue<string>();
+            _jobs.Enqueue<HandleSlackReplyJob>(j => j.ExecuteAsync(teamId, channel, threadTs, text));
         }
 
         // Always 200 — Slack retries aggressively on anything else, including events we intentionally ignore.

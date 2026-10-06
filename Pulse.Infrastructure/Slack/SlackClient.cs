@@ -11,20 +11,22 @@ public class SlackClient : ISlackClient
     private const string PostMessageUrl = "https://slack.com/api/chat.postMessage";
 
     private readonly HttpClient _http;
-    private readonly IAppSettings _settings;
+    private readonly ISlackTokenProvider _tokens;
     private readonly ILogger<SlackClient> _logger;
 
-    public SlackClient(HttpClient http, IAppSettings settings, ILogger<SlackClient> logger)
+    public SlackClient(HttpClient http, ISlackTokenProvider tokens, ILogger<SlackClient> logger)
     {
         _http = http;
-        _settings = settings;
+        _tokens = tokens;
         _logger = logger;
     }
 
     public async Task<(string ChannelId, string Ts)?> PostMessageAsync(
         string channel, string text, string? threadTs = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(_settings.SlackBotToken))
+        // The current organization's own workspace token (multi-tenancy Phase 2b) — never another org's.
+        var token = await _tokens.GetBotTokenAsync(ct);
+        if (string.IsNullOrEmpty(token))
             return null;
 
         try
@@ -34,7 +36,7 @@ public class SlackClient : ISlackClient
                 payload["thread_ts"] = threadTs;
 
             using var request = new HttpRequestMessage(HttpMethod.Post, PostMessageUrl);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.SlackBotToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Content = JsonContent.Create(payload);
 
             using var response = await _http.SendAsync(request, ct);

@@ -27,16 +27,18 @@ public class UpdateAlertRuleHandler : IRequestHandler<UpdateAlertRuleCommand, Se
     private readonly IAlertRuleRepository _rules;
 
     private readonly ICurrentUserService _currentUser;
+    private readonly ISlackInstallationRepository _slack;
 
-    public UpdateAlertRuleHandler(IAlertRuleRepository rules, ICurrentUserService currentUser)
+    public UpdateAlertRuleHandler(IAlertRuleRepository rules, ICurrentUserService currentUser, ISlackInstallationRepository slack)
     {
         _rules = rules;
         _currentUser = currentUser;
+        _slack = slack;
     }
 
     public async Task<ServiceResult<AlertRuleDto>> Handle(UpdateAlertRuleCommand cmd, CancellationToken ct)
     {
-        if (ChatDeliveryAvailability.Check(_currentUser, cmd.SlackChannel, cmd.GoogleChatSpaceId) is string unavailable)
+        if (await ChatDeliveryAvailability.CheckAsync(_currentUser, _slack, cmd.SlackChannel, cmd.GoogleChatSpaceId, ct) is string unavailable)
             return ServiceResult<AlertRuleDto>.Fail("BUSINESS_RULE_VIOLATION", unavailable);
 
         var rule = await _rules.GetByIdAsync(cmd.RuleId, ct);

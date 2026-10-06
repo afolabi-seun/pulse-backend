@@ -1,5 +1,7 @@
 using Pulse.Application.Common.Interfaces;
 
+using Pulse.Domain.Organizations;
+
 namespace Pulse.Infrastructure.Slack;
 
 /// <summary>Hangfire job that answers a threaded reply to an alert Pulse posted to Slack. Runs
@@ -13,21 +15,38 @@ public class HandleSlackReplyJob
     private readonly IAlertRuleRepository _rules;
     private readonly IAlertExplainer _explainer;
     private readonly ISlackClient _slack;
+    private readonly ISlackInstallationRepository _installations;
+    private readonly BackgroundOrganizationContext _organization;
 
     public HandleSlackReplyJob(
         IAlertConversationRepository conversations,
         IAlertRuleRepository rules,
         IAlertExplainer explainer,
-        ISlackClient slack)
+        ISlackClient slack,
+        ISlackInstallationRepository installations,
+        BackgroundOrganizationContext organization)
     {
         _conversations = conversations;
         _rules = rules;
         _explainer = explainer;
         _slack = slack;
+        _installations = installations;
+        _organization = organization;
     }
 
-    public async Task ExecuteAsync(string channel, string threadTs, string question)
+    /// <summary>Replies enqueued before multi-tenancy Phase 2b carried no workspace; they came from the
+    /// deployment's one workspace, which is the default organization's.</summary>
+    public Task ExecuteAsync(string channel, string threadTs, string question) =>
+        ExecuteAsync(null, channel, threadTs, question);
+
+    public async Task ExecuteAsync(string? teamId, string channel, string threadTs, string question)
     {
+        // Act for the organization that owns the workspace, so the lookups below, the explainer's data and
+        // the reply's bot token are all that org's. A workspace no org has connected can only be the legacy
+        // SLACK_BOT_TOKEN workspace, i.e. the default organization's.
+        var installation = teamId is null ? null : await _installations.GetByTeamIdAsync(teamId);
+        _organization.OrganizationId = installation?.OrganizationId ?? Organization.DefaultId;
+
         var conversation = await _conversations.FindAsync(channel, threadTs);
         if (conversation is null) return; // not a thread Pulse started — ignore
 
