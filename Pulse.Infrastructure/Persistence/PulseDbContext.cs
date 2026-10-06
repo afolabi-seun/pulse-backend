@@ -74,6 +74,7 @@ public partial class PulseDbContext : DbContext
     public DbSet<AlertMetricSnapshot> AlertMetricSnapshots => Set<AlertMetricSnapshot>();
     public DbSet<GoogleChatSpace> GoogleChatSpaces => Set<GoogleChatSpace>();
     public DbSet<GoogleChatThread> GoogleChatThreads => Set<GoogleChatThread>();
+    public DbSet<GoogleChatLinkCode> GoogleChatLinkCodes => Set<GoogleChatLinkCode>();
     public DbSet<AutomationRule> AutomationRules => Set<AutomationRule>();
     public DbSet<AutomationExecution> AutomationExecutions => Set<AutomationExecution>();
 

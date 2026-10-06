@@ -19,7 +19,8 @@ public class CreateAlertRuleHandlerTests
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private CreateAlertRuleHandler CreateHandler() =>
-        new(_rules.Object, _teams.Object, _projects.Object, _access.Object, _currentUser.Object, new Mock<ISlackInstallationRepository>().Object);
+        new(_rules.Object, _teams.Object, _projects.Object, _access.Object, _currentUser.Object,
+            new Mock<ISlackInstallationRepository>().Object, new Mock<IGoogleChatSpaceRepository>().Object);
 
     [Fact]
     public async Task Returns_NOT_FOUND_when_the_team_does_not_exist()

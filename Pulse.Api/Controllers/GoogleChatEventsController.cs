@@ -4,6 +4,9 @@ using Pulse.Application.Common.Interfaces;
 using Pulse.Infrastructure.GoogleChat;
 using Hangfire;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
+using Pulse.Application.Integrations.GoogleChat;
+using MediatR;
 
 namespace Pulse.Api.Controllers;
 
@@ -22,13 +25,19 @@ public class GoogleChatEventsController : ControllerBase
     private readonly IGoogleChatRequestVerifier _verifier;
     private readonly IGoogleChatSpaceRepository _spaces;
     private readonly IBackgroundJobClient _jobs;
+    private readonly IMediator _mediator;
+
+    // "@Pulse link ABCD-2345" — Chat strips the mention into argumentText.
+    private static readonly Regex LinkCommand = new(@"^\s*link\s+([A-Za-z0-9]{4}-?[A-Za-z0-9]{4})\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public GoogleChatEventsController(
-        IGoogleChatRequestVerifier verifier, IGoogleChatSpaceRepository spaces, IBackgroundJobClient jobs)
+        IGoogleChatRequestVerifier verifier, IGoogleChatSpaceRepository spaces, IBackgroundJobClient jobs, IMediator mediator)
     {
         _verifier = verifier;
         _spaces = spaces;
         _jobs = jobs;
+        _mediator = mediator;
     }
 
     [HttpPost]
@@ -51,6 +60,12 @@ public class GoogleChatEventsController : ControllerBase
                 await _spaces.SaveChangesAsync(ct);
             }
         }
+        else if (type == "MESSAGE" && LinkCodeIn(body) is { } link)
+        {
+            // Linking a space to an organization (multi-tenancy Phase 2c): answered synchronously, in the space.
+            var reply = await _mediator.Send(new LinkGoogleChatSpaceCommand(link.SpaceId, link.DisplayName, link.Code), ct);
+            return Ok(new { text = reply.Data });
+        }
         else if (type == "MESSAGE" && TryExtractMessage(body, out var spaceId, out var threadName, out var text))
         {
             // Unlike Slack's thread_ts or Teams' ReplyToId, every Chat message — including a brand
@@ -64,6 +79,18 @@ public class GoogleChatEventsController : ControllerBase
         // Chat accepts an empty JSON object as "no synchronous reply" — the real answer, if any,
         // arrives later as its own message via the REST API from HandleGoogleChatReplyJob.
         return Ok(new { });
+    }
+
+    private static (string SpaceId, string DisplayName, string Code)? LinkCodeIn(JsonObject body)
+    {
+        if (body["message"] is not JsonObject message || body["space"] is not JsonObject space)
+            return null;
+        var argument = message["argumentText"]?.GetValue<string>() ?? message["text"]?.GetValue<string>();
+        var match = argument is null ? null : LinkCommand.Match(argument);
+        var spaceId = space["name"]?.GetValue<string>();
+        if (match is not { Success: true } || spaceId is null)
+            return null;
+        return (spaceId, space["displayName"]?.GetValue<string>() ?? "Direct message", match.Groups[1].Value);
     }
 
     private static bool TryExtractMessage(JsonObject body, out string spaceId, out string threadName, out string text)

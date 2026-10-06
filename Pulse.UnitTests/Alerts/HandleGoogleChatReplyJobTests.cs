@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Alerts;
 using Pulse.Domain.Engineers;
@@ -12,8 +13,20 @@ public class HandleGoogleChatReplyJobTests
     private readonly Mock<IAlertRuleRepository> _rules = new();
     private readonly Mock<IAlertExplainer> _explainer = new();
     private readonly Mock<IGoogleChatMessenger> _chat = new();
+    private readonly Mock<IGoogleChatSpaceRepository> _spaces = new();
+    private readonly BackgroundOrganizationContext _organization = new();
+    private readonly Guid _spaceOrganization = Guid.NewGuid();
 
-    private HandleGoogleChatReplyJob CreateJob() => new(_threads.Object, _rules.Object, _explainer.Object, _chat.Object);
+    public HandleGoogleChatReplyJobTests()
+    {
+        // "spaces/A" is linked to an organization; tests about unlinked spaces use another space.
+        var space = GoogleChatSpace.Create("spaces/A", "Alerts");
+        space.LinkTo(_spaceOrganization);
+        _spaces.Setup(s => s.GetBySpaceIdAsync("spaces/A", default)).ReturnsAsync(space);
+    }
+
+    private HandleGoogleChatReplyJob CreateJob() =>
+        new(_threads.Object, _rules.Object, _explainer.Object, _chat.Object, _spaces.Object, _organization);
 
     [Fact]
     public async Task Does_nothing_when_the_thread_is_not_one_Pulse_started()
@@ -68,5 +81,29 @@ public class HandleGoogleChatReplyJobTests
         await CreateJob().ExecuteAsync("spaces/A", "spaces/A/threads/1", "why though?");
 
         _chat.Verify(c => c.PostToSpaceAsync("spaces/A", "Because three tasks are blocked.", "spaces/A/threads/1", default), Times.Once);
+    }
+    // ── Which organization a reply is handled for (multi-tenancy Phase 2c) ───────
+
+    [Fact]
+    public async Task A_reply_in_a_linked_space_is_handled_for_the_spaces_organization()
+    {
+        _threads.Setup(t => t.FindAsync("spaces/A", "spaces/A/threads/1", default))
+            .Callback(() => _organization.OrganizationId.Should().Be(_spaceOrganization))
+            .ReturnsAsync((GoogleChatThread?)null);
+
+        await CreateJob().ExecuteAsync("spaces/A", "spaces/A/threads/1", "why?");
+
+        _organization.OrganizationId.Should().Be(_spaceOrganization);
+    }
+
+    [Fact]
+    public async Task A_reply_in_an_unlinked_space_is_ignored()
+    {
+        _spaces.Setup(s => s.GetBySpaceIdAsync("spaces/B", default)).ReturnsAsync(GoogleChatSpace.Create("spaces/B", "Unlinked"));
+
+        await CreateJob().ExecuteAsync("spaces/B", "spaces/B/threads/1", "why?");
+
+        _threads.Verify(t => t.FindAsync(It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        _organization.OrganizationId.Should().BeNull();
     }
 }
