@@ -7,16 +7,18 @@ namespace Pulse.Application.TimeEntries.Queries;
 
 public record ProjectActivityPersonDto(Guid EngineerId, string Name, decimal Hours);
 
+/// <param name="Date">The day this row's hours were logged on — a task or category worked on
+/// several days in the window is several rows, one per day, not one summed across the window.</param>
 /// <param name="TaskId">Null for a category row (meetings, admin, leave, other) — time with no task.</param>
 /// <param name="Label">The task's title, or the category's name for a category row.</param>
 public record ProjectActivityItemDto(
-    Guid? TaskId, string Label, string? Key, string? Status, decimal Hours, IReadOnlyList<ProjectActivityPersonDto> People);
+    DateOnly Date, Guid? TaskId, string Label, string? Key, string? Status, decimal Hours, IReadOnlyList<ProjectActivityPersonDto> People);
 
 public record ProjectActivityByPersonDto(Guid EngineerId, string Name, int Tasks, decimal Hours);
 
 /// <summary>Who logged the hours behind one "Hours by project" line, and on what.</summary>
-/// <param name="Items">One row per task (and per non-task category), biggest first. Empty for the personal-tasks line,
-/// which names people but never titles.</param>
+/// <param name="Items">One row per task (or non-task category) per day, most recent day first.
+/// Empty for the personal-tasks line, which names people but never titles.</param>
 public record ProjectTimeActivityDto(
     string Kind, string Name, decimal TotalHours,
     IReadOnlyList<ProjectActivityItemDto> Items, IReadOnlyList<ProjectActivityByPersonDto> People);
@@ -131,13 +133,15 @@ public class GetProjectTimeActivityHandler : IRequestHandler<GetProjectTimeActiv
         var items = new List<ProjectActivityItemDto>();
         if (!titlesHidden)
         {
-            // One row per task, then one per non-task category — further split by that entry's own
+            // One row per task (or non-task category) PER DAY — further split by that entry's own
             // note when it has one (so e.g. "Sprint planning" and "1:1s" don't collapse into one
             // undifferentiated "Meetings" bucket), and grouped back under the bare category label
-            // when it doesn't, same as before.
+            // when it doesn't, same as before. Adding the date to the key is what turns "worked on
+            // this task across the window" into "worked on this task on this day" — the same task
+            // over three days is three rows, not one summed total hiding which days it happened on.
             foreach (var group in rows.GroupBy(r => r.Entry.TaskId.HasValue
-                ? (object)r.Entry.TaskId.Value
-                : (r.Entry.Category, Note: r.Entry.Note?.Trim() ?? "")))
+                ? (object)(r.Entry.Date, r.Entry.TaskId.Value)
+                : (r.Entry.Date, r.Entry.Category, Note: r.Entry.Note?.Trim() ?? "")))
             {
                 var first = group.First();
                 var people = group.GroupBy(r => r.Entry.EngineerId)
@@ -148,7 +152,7 @@ public class GetProjectTimeActivityHandler : IRequestHandler<GetProjectTimeActiv
                 {
                     var task = first.Task;
                     var key = task is not null && codes.TryGetValue(task.ProjectId, out var code) ? $"{code}-{task.TaskNumber}" : null;
-                    items.Add(new ProjectActivityItemDto(taskId, task?.Title ?? "Private task", key,
+                    items.Add(new ProjectActivityItemDto(first.Entry.Date, taskId, task?.Title ?? "Private task", key,
                         task is null ? null : Camel(task.Status.ToString()), people.Sum(p => p.Hours), people));
                 }
                 else
@@ -157,11 +161,11 @@ public class GetProjectTimeActivityHandler : IRequestHandler<GetProjectTimeActiv
                     var baseLabel = CategoryLabel.GetValueOrDefault(category, category);
                     var note = first.Entry.Note?.Trim();
                     var label = string.IsNullOrEmpty(note) ? baseLabel : $"{baseLabel} — {note}";
-                    items.Add(new ProjectActivityItemDto(null, label, null, null,
+                    items.Add(new ProjectActivityItemDto(first.Entry.Date, null, label, null, null,
                         people.Sum(p => p.Hours), people));
                 }
             }
-            items = items.OrderByDescending(i => i.Hours).ThenBy(i => i.Label).ToList();
+            items = items.OrderByDescending(i => i.Date).ThenByDescending(i => i.Hours).ThenBy(i => i.Label).ToList();
         }
 
         var byPerson = rows.GroupBy(r => r.Entry.EngineerId)
