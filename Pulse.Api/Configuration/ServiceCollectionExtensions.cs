@@ -59,6 +59,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDirectEmailSender>(sp => sp.GetRequiredService<MailKitEmailService>());
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IEngineerRepository, EngineerRepository>();
+        services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
