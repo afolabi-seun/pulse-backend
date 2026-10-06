@@ -2,6 +2,7 @@ using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Alerts;
 using Pulse.Domain.Engineers;
 using Pulse.Infrastructure.Slack;
+using FluentAssertions;
 using Moq;
 
 namespace Pulse.UnitTests.Alerts;
@@ -12,8 +13,11 @@ public class HandleSlackReplyJobTests
     private readonly Mock<IAlertRuleRepository> _rules = new();
     private readonly Mock<IAlertExplainer> _explainer = new();
     private readonly Mock<ISlackClient> _slack = new();
+    private readonly Mock<ISlackInstallationRepository> _installations = new();
+    private readonly BackgroundOrganizationContext _organization = new();
 
-    private HandleSlackReplyJob CreateJob() => new(_conversations.Object, _rules.Object, _explainer.Object, _slack.Object);
+    private HandleSlackReplyJob CreateJob() =>
+        new(_conversations.Object, _rules.Object, _explainer.Object, _slack.Object, _installations.Object, _organization);
 
     [Fact]
     public async Task Does_nothing_when_the_thread_is_not_one_Pulse_started()
@@ -68,5 +72,34 @@ public class HandleSlackReplyJobTests
         await CreateJob().ExecuteAsync("C1", "1700.0", "why though?");
 
         _slack.Verify(s => s.PostMessageAsync("C1", "Because three tasks are blocked.", "1700.0", default), Times.Once);
+    }
+
+    // ── Which organization a reply is handled for (multi-tenancy Phase 2b) ───────
+
+    [Fact]
+    public async Task A_reply_from_a_connected_workspace_is_handled_for_that_workspaces_organization()
+    {
+        var orgId = Guid.NewGuid();
+        _installations.Setup(i => i.GetByTeamIdAsync("T123", default))
+            .ReturnsAsync(Pulse.Domain.Integrations.SlackInstallation.Create(orgId, "T123", "Acme", "U1", "v1:x", Guid.NewGuid()));
+        _conversations.Setup(c => c.FindAsync("C1", "1700.0", default))
+            .Callback(() => _organization.OrganizationId.Should().Be(orgId, "the lookup must already be scoped to the workspace's org"))
+            .ReturnsAsync((AlertConversation?)null);
+
+        await CreateJob().ExecuteAsync("T123", "C1", "1700.0", "why?");
+
+        _organization.OrganizationId.Should().Be(orgId);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("T-not-connected")]
+    public async Task A_reply_from_no_connected_workspace_is_the_legacy_default_organizations(string? teamId)
+    {
+        _conversations.Setup(c => c.FindAsync("C1", "1700.0", default)).ReturnsAsync((AlertConversation?)null);
+
+        await CreateJob().ExecuteAsync(teamId, "C1", "1700.0", "why?");
+
+        _organization.OrganizationId.Should().Be(Pulse.Domain.Organizations.Organization.DefaultId);
     }
 }

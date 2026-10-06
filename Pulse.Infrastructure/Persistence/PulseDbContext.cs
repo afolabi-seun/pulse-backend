@@ -9,6 +9,7 @@ using Pulse.Domain.Escalations;
 using Pulse.Domain.Feedback;
 using Pulse.Domain.Notifications;
 using Pulse.Domain.Overrides;
+using Pulse.Domain.Integrations;
 using Pulse.Domain.Organizations;
 using Pulse.Domain.Projects;
 using Pulse.Domain.Vitals;
@@ -54,6 +55,7 @@ public partial class PulseDbContext : DbContext
     public DbSet<DepartmentThresholdOverride> DepartmentThresholdOverrides => Set<DepartmentThresholdOverride>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<SlackInstallation> SlackInstallations => Set<SlackInstallation>();
     public DbSet<Sprint> Sprints => Set<Sprint>();
     public DbSet<TaskDependency> TaskDependencies => Set<TaskDependency>();
     public DbSet<Subtask> Subtasks => Set<Subtask>();

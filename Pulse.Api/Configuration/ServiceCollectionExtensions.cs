@@ -17,6 +17,7 @@ using Pulse.Application.TimeEntries;
 using Pulse.Infrastructure.BackgroundJobs;
 using Pulse.Infrastructure.DemoData;
 using Pulse.Infrastructure.Email;
+using Pulse.Infrastructure.Integrations;
 using Pulse.Infrastructure.Persistence;
 using Pulse.Infrastructure.AlertExplanations;
 using Pulse.Infrastructure.Persistence.Repositories;
@@ -60,6 +61,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IEngineerRepository, EngineerRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<ISlackInstallationRepository, SlackInstallationRepository>();
+        services.AddScoped<ISlackTokenProvider, SlackTokenProvider>();
+        services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
@@ -105,6 +109,7 @@ public static class ServiceCollectionExtensions
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
+        services.AddHttpClient<ISlackOAuthClient, SlackOAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient<ISlackClient, SlackClient>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(10);

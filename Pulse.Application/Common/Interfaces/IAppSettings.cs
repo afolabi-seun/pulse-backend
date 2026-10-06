@@ -46,7 +46,20 @@ public interface IAppSettings
     /// <summary>Both null unless a Slack App (not just an incoming webhook) has been installed —
     /// required only for follow-up Q&A in an alert's Slack thread, never for one-way delivery.</summary>
     string? SlackSigningSecret { get; }
+    /// <summary>The default organization's bot token, from before organizations connected their own
+    /// workspaces (multi-tenancy Phase 2b). Still used for the default org when it hasn't connected one.</summary>
     string? SlackBotToken { get; }
+    /// <summary>The Slack app's OAuth credentials, for each organization's "Add to Slack" install. All three
+    /// are needed; without them organizations can't connect Slack (the default org's SlackBotToken still works).</summary>
+    string? SlackClientId { get; }
+    string? SlackClientSecret { get; }
+    /// <summary>Must exactly match a Redirect URL in the Slack app's OAuth settings —
+    /// https://&lt;api host&gt;/api/v1/integrations/slack/oauth/callback.</summary>
+    string? SlackOAuthRedirectUri { get; }
+
+    /// <summary>Base64 of 32 random bytes: the AES-256 key that encrypts integration secrets stored in the
+    /// database (organizations' Slack bot tokens). Required before any organization can connect Slack.</summary>
+    string? IntegrationEncryptionKey { get; }
 
     // ── Google Chat follow-up Q&A (optional) ────────────────────────────────────
     /// <summary>The raw JSON key content (not a file path) for a Google Cloud service account with

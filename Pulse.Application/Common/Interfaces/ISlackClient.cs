@@ -2,8 +2,9 @@ namespace Pulse.Application.Common.Interfaces;
 
 /// <summary>Posts via the Slack Web API (chat.postMessage), as opposed to an incoming webhook —
 /// needed specifically because a webhook can't return a message ts to reply into later, so it can't
-/// back a follow-up conversation the way this can. Only usable when a Slack bot token is
-/// configured; every method degrades to null rather than throwing when it isn't.</summary>
+/// back a follow-up conversation the way this can. Posts with the current organization's own workspace
+/// token (ISlackTokenProvider); every method degrades to null rather than throwing when the organization
+/// has none.</summary>
 public interface ISlackClient
 {
     /// <summary>Returns the channel and message ts on success (persist these to track the thread for

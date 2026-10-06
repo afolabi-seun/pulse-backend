@@ -5,6 +5,7 @@ using Pulse.Domain.Email;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Epics;
 using Pulse.Domain.Escalations;
+using Pulse.Domain.Integrations;
 using Pulse.Domain.Notifications;
 using Pulse.Domain.Organizations;
 using Pulse.Domain.Overrides;
@@ -86,6 +87,7 @@ public partial class PulseDbContext
         b.Entity<DepartmentThresholdOverride>().HasQueryFilter(d => CurrentOrganizationId == null || d.OrganizationId == CurrentOrganizationId);
         b.Entity<GoogleChatSpace>().HasQueryFilter(s => CurrentOrganizationId == null || s.OrganizationId == CurrentOrganizationId);
         b.Entity<FailedEmail>().HasQueryFilter(e => CurrentOrganizationId == null || e.OrganizationId == CurrentOrganizationId);
+        b.Entity<SlackInstallation>().HasQueryFilter(s => CurrentOrganizationId == null || s.OrganizationId == CurrentOrganizationId);
 
         // ── Through an engineer ─────────────────────────────────────────────────
         b.Entity<RefreshToken>().HasQueryFilter(r => CurrentOrganizationId == null || Engineers.Any(e => e.Id == r.EngineerID));
