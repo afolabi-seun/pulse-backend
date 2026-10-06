@@ -161,8 +161,25 @@ public class TimeEntriesController : ControllerBase
         if (!result.IsSuccess)
             return result.ToActionResult();
 
-        var csv = TimeEntrySummaryCsvRenderer.Render(result.Data!);
-        var filename = $"time-summary-{result.Data!.WeekOf}_{result.Data!.To}.csv";
+        var summary = result.Data!;
+        var resolvedFrom = DateOnly.Parse(summary.WeekOf);
+        var resolvedTo = DateOnly.Parse(summary.To);
+        var role = GetRole();
+        var actorId = GetActorId();
+
+        // Same per-line breakdown the "Hours by project" detail shows on screen (one query per
+        // line, same as expanding each one there) — the export carries what a reader would
+        // otherwise have to open every line to see.
+        var details = new List<ProjectTimeActivityDto>();
+        foreach (var p in summary.Projects)
+        {
+            var activity = await _mediator.Send(new GetProjectTimeActivityQuery(actorId, role, p.Kind, p.ProjectId, resolvedFrom, resolvedTo));
+            if (activity.IsSuccess)
+                details.Add(activity.Data!);
+        }
+
+        var csv = TimeEntrySummaryCsvRenderer.Render(summary, details);
+        var filename = $"time-summary-{summary.WeekOf}_{summary.To}.csv";
         return File(csv, "text/csv", filename);
     }
 

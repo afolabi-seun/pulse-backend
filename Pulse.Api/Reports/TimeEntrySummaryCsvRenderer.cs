@@ -10,7 +10,11 @@ namespace Pulse.Api.Reports;
 /// </summary>
 public static class TimeEntrySummaryCsvRenderer
 {
-    public static byte[] Render(TimeEntrySummaryDto summary)
+    /// <param name="summary">The by-engineer and by-project roll-ups.</param>
+    /// <param name="details">One entry per line in <paramref name="summary"/>.Projects, same order —
+    /// the per-task/per-category breakdown each line shows when expanded on screen. Omit (or pass
+    /// an empty list) to render just the two roll-up sections, as before.</param>
+    public static byte[] Render(TimeEntrySummaryDto summary, IReadOnlyList<ProjectTimeActivityDto>? details = null)
     {
         var sb = new StringBuilder();
 
@@ -43,6 +47,26 @@ public static class TimeEntrySummaryCsvRenderer
         AppendLine(sb, "Project,Kind,Total Hours");
         foreach (var p in summary.Projects)
             AppendLine(sb, $"{Escape(p.ProjectName)},{Escape(p.Kind)},{p.TotalHours}");
+
+        // ── Hours by Category/Task ───────────────────────────────────────────
+        // Same breakdown as the "Hours by project" detail on screen — a category row's label
+        // already carries its note when it has one (e.g. "Meetings — Sprint planning"), so two
+        // different meetings don't collapse into one undifferentiated line here either. Empty for
+        // the personal-tasks line, which names people but never task/category detail.
+        if (details is { Count: > 0 })
+        {
+            sb.AppendLine();
+            AppendLine(sb, "=== HOURS BY CATEGORY/TASK ===");
+            AppendLine(sb, "Project,Category/Task,Who Logged,Hours");
+            foreach (var project in details)
+            {
+                foreach (var item in project.Items)
+                {
+                    var whoLogged = string.Join(" | ", item.People.Select(p => $"{p.Name} {p.Hours}h"));
+                    AppendLine(sb, $"{Escape(project.Name)},{Escape(item.Label)},{Escape(whoLogged)},{item.Hours}");
+                }
+            }
+        }
 
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
