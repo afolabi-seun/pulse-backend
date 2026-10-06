@@ -138,7 +138,7 @@ public class OperatorTests : IntegrationTestBase, IClassFixture<PulseWebApplicat
 
         var toSlack = await orgBHead.PostAsJsonAsync("/api/v1/alert-rules", Rule("#alerts"));
         toSlack.IsSuccessStatusCode.Should().BeFalse("org B's alerts would land in the default org's Slack workspace");
-        (await toSlack.Content.ReadAsStringAsync()).Should().Contain("aren't available for your organization yet");
+        (await toSlack.Content.ReadAsStringAsync()).Should().Contain("Connect your organization's Slack workspace");
 
         (await orgBHead.PostAsJsonAsync("/api/v1/alert-rules", Rule(null)))
             .StatusCode.Should().Be(HttpStatusCode.Created, "in-app delivery works for every organization");
