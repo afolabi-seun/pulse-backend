@@ -16,6 +16,9 @@ public class GoogleChatSpaceRepository : IGoogleChatSpaceRepository
     public async Task<GoogleChatSpace?> GetBySpaceIdAsync(string spaceId, CancellationToken ct = default) =>
         await _db.GoogleChatSpaces.FirstOrDefaultAsync(s => s.SpaceId == spaceId, ct);
 
+    public Task<GoogleChatSpace?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        _db.GoogleChatSpaces.FirstOrDefaultAsync(s => s.Id == id, ct);
+
     public async Task UpsertAsync(string spaceId, string displayName, CancellationToken ct = default)
     {
         var existing = await GetBySpaceIdAsync(spaceId, ct);
@@ -28,6 +31,23 @@ public class GoogleChatSpaceRepository : IGoogleChatSpaceRepository
             await _db.GoogleChatSpaces.AddAsync(GoogleChatSpace.Create(spaceId, displayName), ct);
         }
     }
+
+    public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+}
+
+public class GoogleChatLinkCodeRepository : IGoogleChatLinkCodeRepository
+{
+    private readonly PulseDbContext _db;
+
+    public GoogleChatLinkCodeRepository(PulseDbContext db) => _db = db;
+
+    public Task<GoogleChatLinkCode?> GetByHashAsync(string codeHash, CancellationToken ct = default) =>
+        _db.GoogleChatLinkCodes.FirstOrDefaultAsync(c => c.CodeHash == codeHash, ct);
+
+    public async Task AddAsync(GoogleChatLinkCode linkCode, CancellationToken ct = default) =>
+        await _db.GoogleChatLinkCodes.AddAsync(linkCode, ct);
+
+    public void Remove(GoogleChatLinkCode linkCode) => _db.GoogleChatLinkCodes.Remove(linkCode);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

@@ -62,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEngineerRepository, EngineerRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<ISlackInstallationRepository, SlackInstallationRepository>();
+        services.AddScoped<IGoogleChatLinkCodeRepository, GoogleChatLinkCodeRepository>();
         services.AddScoped<ISlackTokenProvider, SlackTokenProvider>();
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

@@ -31,10 +31,11 @@ public class CreateAlertRuleHandler : IRequestHandler<CreateAlertRuleCommand, Se
     private readonly IProjectAccessPolicy _access;
     private readonly ICurrentUserService _currentUser;
     private readonly ISlackInstallationRepository _slack;
+    private readonly IGoogleChatSpaceRepository _googleChatSpaces;
 
     public CreateAlertRuleHandler(
         IAlertRuleRepository rules, ITeamRepository teams, IProjectRepository projects, IProjectAccessPolicy access,
-        ICurrentUserService currentUser, ISlackInstallationRepository slack)
+        ICurrentUserService currentUser, ISlackInstallationRepository slack, IGoogleChatSpaceRepository googleChatSpaces)
     {
         _rules = rules;
         _teams = teams;
@@ -42,11 +43,12 @@ public class CreateAlertRuleHandler : IRequestHandler<CreateAlertRuleCommand, Se
         _access = access;
         _currentUser = currentUser;
         _slack = slack;
+        _googleChatSpaces = googleChatSpaces;
     }
 
     public async Task<ServiceResult<AlertRuleDto>> Handle(CreateAlertRuleCommand cmd, CancellationToken ct)
     {
-        if (await ChatDeliveryAvailability.CheckAsync(_currentUser, _slack, cmd.SlackChannel, cmd.GoogleChatSpaceId, ct) is string unavailable)
+        if (await ChatDeliveryAvailability.CheckAsync(_currentUser, _slack, _googleChatSpaces, cmd.SlackChannel, cmd.GoogleChatSpaceId, ct) is string unavailable)
             return ServiceResult<AlertRuleDto>.Fail("BUSINESS_RULE_VIOLATION", unavailable);
 
         string? scopeName;

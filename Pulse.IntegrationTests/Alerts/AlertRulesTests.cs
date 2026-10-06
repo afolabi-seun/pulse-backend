@@ -179,6 +179,15 @@ public class AlertRulesTests : IntegrationTestBase, IClassFixture<PulseWebApplic
         var lead = await SeedEngineerAsync("alert_rule_gchat_lead@pulse.io", Roles.TeamLead);
         var team = await SeedTeamAsync("Alert Rule Google Chat Team", lead.Id);
         var client = await AuthenticatedClientAsync("alert_rule_gchat_lead@pulse.io");
+        // A rule can only target a space linked to its organization (multi-tenancy Phase 2c).
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
+            var space = Pulse.Domain.Alerts.GoogleChatSpace.Create("spaces/AAAAAAAAAAA", "Alerts");
+            space.LinkTo(Pulse.Domain.Organizations.Organization.DefaultId);
+            db.GoogleChatSpaces.Add(space);
+            await db.SaveChangesAsync();
+        }
 
         var created = await client.PostAsJsonAsync("/api/v1/alert-rules", new
         {
