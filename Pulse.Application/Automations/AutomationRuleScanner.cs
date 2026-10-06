@@ -19,10 +19,8 @@ public class AutomationRuleScanner : IRecurringJob
     private readonly ITeamRepository _teams;
     private readonly IAutomationExecutionRepository _executions;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public AutomationRuleScanner(
         IAutomationRuleRepository rules,
@@ -31,20 +29,16 @@ public class AutomationRuleScanner : IRecurringJob
         ITeamRepository teams,
         IAutomationExecutionRepository executions,
         IAuditLogRepository audit,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _rules = rules;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _executions = executions;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -106,11 +100,7 @@ public class AutomationRuleScanner : IRecurringJob
         AutomationRule rule, Guid taskId, string taskTitle,
         Domain.Engineers.Engineer lead, Domain.Engineers.Engineer? previousAssignee, CancellationToken ct)
     {
-        var leadNotification = Notification.Create(lead.Id, NotificationKind.TaskAssigned,
-            System.Text.Json.JsonSerializer.Serialize(new { taskId, taskTitle }));
-        await _notifications.AddAsync(leadNotification, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(lead.Id, NotificationDto.From(leadNotification), ct);
+        await _notify.NotifyAsync(lead.Id, NotificationKind.TaskAssigned, System.Text.Json.JsonSerializer.Serialize(new { taskId, taskTitle }), ct: ct);
 
         var taskLink = $"{_settings.AppBaseUrl}/tasks/{taskId}";
         var body = $"""
@@ -119,15 +109,11 @@ public class AutomationRuleScanner : IRecurringJob
             {EmailTemplate.Button(taskLink, "View task")}
             {EmailTemplate.Muted("This automation was configured in Pulse's My Automations page.")}
             """;
-        _emailQueue.Enqueue(lead.Email, $"Blocked task reassigned to you: {taskTitle}", EmailTemplate.Layout(body));
+        await _notify.EmailAsync(lead.Id, NotificationKind.TaskAssigned, new NotificationEmail(lead.Email, $"Blocked task reassigned to you: {taskTitle}", EmailTemplate.Layout(body)), ct);
 
         if (previousAssignee is not null)
         {
-            var previousNotification = Notification.Create(previousAssignee.Id, NotificationKind.AutomationTaskReassigned,
-                System.Text.Json.JsonSerializer.Serialize(new { taskId, taskTitle }));
-            await _notifications.AddAsync(previousNotification, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(previousAssignee.Id, NotificationDto.From(previousNotification), ct);
+            await _notify.NotifyAsync(previousAssignee.Id, NotificationKind.AutomationTaskReassigned, System.Text.Json.JsonSerializer.Serialize(new { taskId, taskTitle }), ct: ct);
         }
     }
 }

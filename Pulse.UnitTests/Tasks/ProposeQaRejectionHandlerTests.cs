@@ -7,6 +7,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 using DomainTaskStatus = Pulse.Domain.Tasks.TaskStatus;
 
 namespace Pulse.UnitTests.Tasks;
@@ -28,8 +29,8 @@ public class ProposeQaRejectionHandlerTests
     }
 
     private ProposeQaRejectionHandler CreateHandler() =>
-        new(_tasks.Object, _audit.Object, _notifications.Object, _realtime.Object,
-            _engineers.Object, _teams.Object, _emailQueue.Object, _settings.Object);
+        new(_tasks.Object, _audit.Object, _engineers.Object, _teams.Object, _settings.Object,
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     internal static (PulseTask Parent, PulseTask Qa) InQaPair(Guid? qaAssigneeId = null)
     {

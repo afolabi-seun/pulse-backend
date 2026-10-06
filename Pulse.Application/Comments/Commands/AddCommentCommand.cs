@@ -16,9 +16,7 @@ public class AddCommentHandler : IRequestHandler<AddCommentCommand, ServiceResul
     private readonly IEngineerRepository _engineers;
     private readonly IProjectAccessPolicy _access;
     private readonly ITaskRepository _tasks;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public AddCommentHandler(
@@ -26,18 +24,14 @@ public class AddCommentHandler : IRequestHandler<AddCommentCommand, ServiceResul
         IEngineerRepository engineers,
         IProjectAccessPolicy access,
         ITaskRepository tasks,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings)
     {
         _comments = comments;
         _engineers = engineers;
         _access = access;
         _tasks = tasks;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -97,10 +91,7 @@ public class AddCommentHandler : IRequestHandler<AddCommentCommand, ServiceResul
                 mentionedByName = authorName,
             });
 
-            var n = Notification.Create(engineer.Id, NotificationKind.Mentioned, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(engineer.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(engineer.Id, NotificationKind.Mentioned, payload, ct: ct);
 
             var emailBody = $"""
                 <p>Hi {engineer.Name},</p>
@@ -111,7 +102,7 @@ public class AddCommentHandler : IRequestHandler<AddCommentCommand, ServiceResul
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because you were mentioned in a comment.")}
                 """;
-            _emailQueue.Enqueue(engineer.Email, $"You were mentioned: {task.Title}", EmailTemplate.Layout(emailBody));
+            await _notify.EmailAsync(engineer.Id, NotificationKind.Mentioned, new NotificationEmail(engineer.Email, $"You were mentioned: {task.Title}", EmailTemplate.Layout(emailBody)), ct);
         }
     }
 }

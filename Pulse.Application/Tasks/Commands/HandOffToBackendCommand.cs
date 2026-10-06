@@ -28,11 +28,9 @@ public class HandOffToBackendHandler : IRequestHandler<HandOffToBackendCommand, 
     private readonly IProjectRepository _projects;
     private readonly IAuditLogRepository _audit;
     private readonly IProjectAccessPolicy _access;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
     private readonly ICheckInRepository _checkIns;
+    private readonly INotificationDispatcher _notify;
 
     public HandOffToBackendHandler(
         ITaskRepository tasks,
@@ -40,20 +38,16 @@ public class HandOffToBackendHandler : IRequestHandler<HandOffToBackendCommand, 
         IProjectRepository projects,
         IAuditLogRepository audit,
         IProjectAccessPolicy access,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
         IAppSettings settings,
-        ICheckInRepository checkIns)
+        ICheckInRepository checkIns,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _engineers = engineers;
         _projects = projects;
         _audit = audit;
         _access = access;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
         _settings = settings;
         _checkIns = checkIns;
     }
@@ -101,11 +95,7 @@ public class HandOffToBackendHandler : IRequestHandler<HandOffToBackendCommand, 
 
         if (cmd.BackendAssigneeId != cmd.ActorId)
         {
-            var n = Notification.Create(cmd.BackendAssigneeId, NotificationKind.TaskAssigned,
-                JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }), NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(cmd.BackendAssigneeId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(cmd.BackendAssigneeId, NotificationKind.TaskAssigned, JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }), ct: ct);
 
             var taskLink = $"{_settings.AppBaseUrl}/tasks/{task.Id}";
             var body = $"""
@@ -115,7 +105,7 @@ public class HandOffToBackendHandler : IRequestHandler<HandOffToBackendCommand, 
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because you were handed off this task's backend work.")}
                 """;
-            _emailQueue.Enqueue(target.Email, $"Task handed off: {task.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(target.Id, NotificationKind.TaskAssigned, new NotificationEmail(target.Email, $"Task handed off: {task.Title}", EmailTemplate.Layout(body)), ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));

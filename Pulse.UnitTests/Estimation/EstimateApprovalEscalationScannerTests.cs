@@ -7,6 +7,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Estimation;
 
@@ -29,7 +30,7 @@ public class EstimateApprovalEscalationScannerTests
 
     private EstimateApprovalEscalationScanner CreateScanner() => new(
         _estimation.Object, _tasks.Object, _engineers.Object, _teams.Object,
-        _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object, _thresholds);
+        _settings.Object, _thresholds, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private (PulseTask Task, Engineer Assignee, Engineer TeamLead, Engineer Head, TaskEstimationSession Session) SeedPendingSession()
     {

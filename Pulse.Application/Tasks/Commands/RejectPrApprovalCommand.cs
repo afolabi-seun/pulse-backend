@@ -17,22 +17,22 @@ public class RejectPrApprovalHandler : IRequestHandler<RejectPrApprovalCommand, 
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public RejectPrApprovalHandler(
-        ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams, IAuditLogRepository audit,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings)
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAuditLogRepository audit,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _audit = audit;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -73,10 +73,7 @@ public class RejectPrApprovalHandler : IRequestHandler<RejectPrApprovalCommand, 
                 taskId = task.Id, taskTitle = task.Title,
                 rejectedByName = rejector?.Name, reason = cmd.Reason,
             });
-            var n = Notification.Create(submitterId, NotificationKind.PrApprovalRejected, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(submitterId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(submitterId, NotificationKind.PrApprovalRejected, payload, ct: ct);
 
             var submitter = await _engineers.GetByIdAsync(submitterId, ct);
             if (submitter is not null)
@@ -94,7 +91,7 @@ public class RejectPrApprovalHandler : IRequestHandler<RejectPrApprovalCommand, 
                     {reasonHtml}
                     {EmailTemplate.Button(taskLink, "View task")}
                     """;
-                _emailQueue.Enqueue(submitter.Email, $"PR rejected: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(submitter.Id, NotificationKind.PrApprovalRejected, new NotificationEmail(submitter.Email, $"PR rejected: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

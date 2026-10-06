@@ -20,9 +20,7 @@ public class OverworkDigestJob : IRecurringJob
     private readonly OverworkSignalsCalculator _calculator;
     private readonly ITeamRepository _teams;
     private readonly IDepartmentThresholdRepository _departmentThresholds;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public OverworkDigestJob(
@@ -31,9 +29,7 @@ public class OverworkDigestJob : IRecurringJob
         OverworkSignalsCalculator calculator,
         ITeamRepository teams,
         IDepartmentThresholdRepository departmentThresholds,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings)
     {
         _engineers = engineers;
@@ -41,9 +37,7 @@ public class OverworkDigestJob : IRecurringJob
         _calculator = calculator;
         _teams = teams;
         _departmentThresholds = departmentThresholds;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -110,10 +104,7 @@ public class OverworkDigestJob : IRecurringJob
         var names = overworked.Select(e => e.Name).ToList();
         var payload = JsonSerializer.Serialize(new { count = overworked.Count, engineerNames = names });
 
-        var n = Notification.Create(recipient.Id, NotificationKind.OverworkDigest, payload);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(recipient.Id, NotificationDto.From(n), ct);
+        await _notify.NotifyAsync(recipient.Id, NotificationKind.OverworkDigest, payload, ct: ct);
 
         var list = string.Join("", names.Select(name => $"<li>{name}</li>"));
         var body = $"""
@@ -122,17 +113,14 @@ public class OverworkDigestJob : IRecurringJob
             <ul>{list}</ul>
             {EmailTemplate.Button($"{_settings.AppBaseUrl}/engineers", "View engineers")}
             """;
-        _emailQueue.Enqueue(recipient.Email, $"Overwork digest: {overworked.Count} engineer(s) flagged", EmailTemplate.Layout(body));
+        await _notify.EmailAsync(recipient.Id, NotificationKind.OverworkDigest, new NotificationEmail(recipient.Email, $"Overwork digest: {overworked.Count} engineer(s) flagged", EmailTemplate.Layout(body)), ct);
     }
 
     private async Task SendSummaryDigestAsync(Engineer recipient, int overworkedCount, int teamsAffected, CancellationToken ct)
     {
         var payload = JsonSerializer.Serialize(new { count = overworkedCount, teamsAffected });
 
-        var n = Notification.Create(recipient.Id, NotificationKind.OverworkDigest, payload);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(recipient.Id, NotificationDto.From(n), ct);
+        await _notify.NotifyAsync(recipient.Id, NotificationKind.OverworkDigest, payload, ct: ct);
 
         var body = $"""
             <p>Hi {recipient.Name},</p>
@@ -140,6 +128,6 @@ public class OverworkDigestJob : IRecurringJob
             Team leads and PMs have the per-engineer detail.</p>
             {EmailTemplate.Button($"{_settings.AppBaseUrl}/reports", "View reports")}
             """;
-        _emailQueue.Enqueue(recipient.Email, $"Overwork digest: {overworkedCount} engineer(s) org-wide", EmailTemplate.Layout(body));
+        await _notify.EmailAsync(recipient.Id, NotificationKind.OverworkDigest, new NotificationEmail(recipient.Email, $"Overwork digest: {overworkedCount} engineer(s) org-wide", EmailTemplate.Layout(body)), ct);
     }
 }

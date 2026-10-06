@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Pulse.Application.Auth;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
@@ -33,9 +32,7 @@ public class AssignTaskHandler : IRequestHandler<AssignTaskCommand, ServiceResul
     private readonly IAuditLogRepository _audit;
     private readonly IProjectRepository _projects;
     private readonly IProjectAccessPolicy _access;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
     public AssignTaskHandler(
@@ -45,9 +42,7 @@ public class AssignTaskHandler : IRequestHandler<AssignTaskCommand, ServiceResul
         IAuditLogRepository audit,
         IProjectRepository projects,
         IProjectAccessPolicy access,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IAppSettings settings)
     {
         _tasks = tasks;
@@ -56,9 +51,7 @@ public class AssignTaskHandler : IRequestHandler<AssignTaskCommand, ServiceResul
         _audit = audit;
         _projects = projects;
         _access = access;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
     }
 
@@ -117,9 +110,6 @@ public class AssignTaskHandler : IRequestHandler<AssignTaskCommand, ServiceResul
 
         if (cmd.AssigneeId != cmd.ActorId)
         {
-            await PushAsync(cmd.AssigneeId, NotificationKind.TaskAssigned,
-                new { taskId = task.Id, taskTitle = task.Title }, ct);
-
             var taskLink = $"{_settings.AppBaseUrl}/tasks/{task.Id}";
             var body = $"""
                 <p>Hi {target.Name},</p>
@@ -128,18 +118,11 @@ public class AssignTaskHandler : IRequestHandler<AssignTaskCommand, ServiceResul
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because you were assigned to this task.")}
                 """;
-            _emailQueue.Enqueue(target.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body));
+            await _notify.NotifyAsync(cmd.AssigneeId, NotificationKind.TaskAssigned,
+                new { taskId = task.Id, taskTitle = task.Title },
+                new NotificationEmail(target.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body)), ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));
-    }
-
-    private async Task PushAsync(Guid userId, string kind, object payload, CancellationToken ct)
-    {
-        var n = Notification.Create(userId, kind,
-            JsonSerializer.Serialize(payload), NotificationChannel.InApp);
-        await _notifications.AddAsync(n, ct);
-        await _notifications.SaveChangesAsync(ct);
-        await _realtime.SendNotificationAsync(userId, NotificationDto.From(n), ct);
     }
 }

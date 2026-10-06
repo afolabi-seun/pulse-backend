@@ -6,6 +6,7 @@ using Pulse.Domain.Notifications;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -19,7 +20,7 @@ public class RespondToQaRejectionHandlerTests
     private readonly Mock<INotificationRepository> _notifications = new();
 
     private RespondToQaRejectionHandler CreateHandler() =>
-        new(_tasks.Object, _audit.Object, _realtime.Object, _access.Object, _engineers.Object, _notifications.Object);
+        new(_tasks.Object, _audit.Object, _access.Object, _engineers.Object, TestNotifications.Dispatcher(_notifications, _realtime));
 
     private static PulseTask PendingRejectionTask(Guid assigneeId, Guid reviewerId)
     {

@@ -7,6 +7,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 using DomainTaskStatus = Pulse.Domain.Tasks.TaskStatus;
 
 namespace Pulse.UnitTests.Tasks;
@@ -21,7 +22,7 @@ public class WithdrawQaRejectionHandlerTests
     private readonly Mock<ITeamRepository> _teams = new();
 
     private WithdrawQaRejectionHandler CreateHandler() =>
-        new(_tasks.Object, _audit.Object, _notifications.Object, _realtime.Object, _engineers.Object, _teams.Object);
+        new(_tasks.Object, _audit.Object, _engineers.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime));
 
     private static (PulseTask Parent, PulseTask Qa) PendingRejectionPair(Guid reviewerId, string reason = "Not good enough")
     {

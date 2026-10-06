@@ -6,6 +6,7 @@ using Pulse.Domain.Notifications;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Comments;
 
@@ -33,7 +34,7 @@ public class AddCommentHandlerTests
 
     private AddCommentHandler CreateHandler() =>
         new(_comments.Object, _engineers.Object, _access.Object, _tasks.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     private (PulseTask Task, Engineer Author) SeedTaskAndAuthor()
     {

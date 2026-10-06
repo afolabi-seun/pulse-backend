@@ -5,6 +5,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -28,7 +29,7 @@ public class LoanTaskHandlerTests
 
     private LoanTaskHandler CreateHandler() =>
         new(_tasks.Object, _engineers.Object, _teams.Object, _audit.Object, _escalationEvents.Object, _projects.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     [Fact]
     public async Task Rejects_loaning_a_QA_task_to_a_non_QA_engineer()

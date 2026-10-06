@@ -11,6 +11,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Escalations;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 using DomainTaskStatus = Pulse.Domain.Tasks.TaskStatus;
 
 namespace Pulse.UnitTests.Tasks;
@@ -75,9 +76,8 @@ public class TaskHandlerTests
 
     private UpdateTaskHandler CreateUpdateHandler() =>
         new(_tasks.Object, _engineers.Object, _audit.Object, _escalationEvents.Object, _epics.Object,
-            _notifications.Object, _realtime.Object, _dependencies.Object,
-            _emailQueue.Object, _settings.Object, _access.Object, _projects.Object, _sprints.Object,
-            _checkIns.Object, _teams.Object);
+            _dependencies.Object, _settings.Object, _access.Object, _projects.Object, _sprints.Object,
+            _checkIns.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     [Fact]
     public async Task UpdateTask_returns_NOT_FOUND_when_task_missing()
@@ -717,7 +717,7 @@ public class TaskHandlerTests
 
     private FlagBlockerHandler CreateFlagBlockerHandler() =>
         new(_tasks.Object, _audit.Object, _realtime.Object, _epics.Object, _access.Object,
-            _engineers.Object, _notifications.Object, _emailQueue.Object, _settings.Object);
+            _engineers.Object, _settings.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     [Fact]
     public async Task FlagBlocker_returns_NOT_FOUND_when_task_missing()

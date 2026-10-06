@@ -5,6 +5,7 @@ using Pulse.Domain.Tasks;
 using Pulse.Domain.Teams;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Tasks;
 
@@ -28,7 +29,7 @@ public class LoanSubtaskHandlerTests
 
     private LoanSubtaskHandler CreateHandler() =>
         new(_tasks.Object, _subtasks.Object, _engineers.Object, _teams.Object, _audit.Object, _projects.Object,
-            _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object);
+            TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object);
 
     private (PulseTask Task, Subtask Subtask, Engineer CurrentAssignee, Team CurrentTeam) SetUpTaskWithSubtask(Guid actorId)
     {

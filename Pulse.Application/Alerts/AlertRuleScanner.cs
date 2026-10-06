@@ -18,9 +18,7 @@ public class AlertRuleScanner : IRecurringJob
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
     private readonly IProjectRepository _projects;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IWebhookNotifier _webhookNotifier;
     private readonly IAlertExplainer _explainer;
     private readonly ISlackClient _slackClient;
@@ -34,9 +32,7 @@ public class AlertRuleScanner : IRecurringJob
         IEngineerRepository engineers,
         ITeamRepository teams,
         IProjectRepository projects,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
+        INotificationDispatcher notify,
         IWebhookNotifier webhookNotifier,
         IAlertExplainer explainer,
         ISlackClient slackClient,
@@ -49,9 +45,7 @@ public class AlertRuleScanner : IRecurringJob
         _engineers = engineers;
         _teams = teams;
         _projects = projects;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _webhookNotifier = webhookNotifier;
         _explainer = explainer;
         _slackClient = slackClient;
@@ -104,10 +98,7 @@ public class AlertRuleScanner : IRecurringJob
 
         if (rule.DeliverInApp)
         {
-            var n = Notification.Create(owner.Id, NotificationKind.AlertRuleTriggered, payload);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(owner.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(owner.Id, NotificationKind.AlertRuleTriggered, payload, ct: ct);
         }
 
         // Drafted once and reused for both email and webhook — never blocks firing: null (no API
@@ -127,7 +118,7 @@ public class AlertRuleScanner : IRecurringJob
                 <p>{explanation ?? plainSentence}</p>
                 {EmailTemplate.Muted("This alert was configured by you in Pulse's My Alerts page.")}
                 """;
-            _emailQueue.Enqueue(owner.Email, $"Pulse alert: {rule.Name}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(owner.Id, NotificationKind.AlertRuleTriggered, new NotificationEmail(owner.Email, $"Pulse alert: {rule.Name}", EmailTemplate.Layout(body)), ct);
         }
 
         if (rule.DeliverWebhook)

@@ -40,10 +40,8 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
     private readonly IEngineerRepository _engineers;
     private readonly IAuditLogRepository _audit;
     private readonly IProjectAccessPolicy _access;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
     public CreateTaskHandler(
         ITaskRepository tasks,
@@ -51,19 +49,15 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
         IEngineerRepository engineers,
         IAuditLogRepository audit,
         IProjectAccessPolicy access,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime,
-        IEmailQueue emailQueue,
-        IAppSettings settings)
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _projects = projects;
         _engineers = engineers;
         _audit = audit;
         _access = access;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -174,11 +168,7 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
         // queue shouldn't be silent just because it happened at creation instead of a later edit.
         if (assigneeId.HasValue && assigneeId.Value != cmd.ActorId)
         {
-            var n = Notification.Create(assigneeId.Value, NotificationKind.TaskAssigned,
-                JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }), NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(assigneeId.Value, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(assigneeId.Value, NotificationKind.TaskAssigned, JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }), ct: ct);
 
             var newAssignee = await _engineers.GetByIdAsync(assigneeId.Value, ct);
             if (newAssignee is not null)
@@ -191,7 +181,7 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you were assigned to this task.")}
                     """;
-                _emailQueue.Enqueue(newAssignee.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(newAssignee.Id, NotificationKind.TaskAssigned, new NotificationEmail(newAssignee.Email, $"Task assigned: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 

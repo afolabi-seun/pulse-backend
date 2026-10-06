@@ -24,22 +24,26 @@ public class FlagBlockerHandler : IRequestHandler<FlagBlockerCommand, ServiceRes
     private readonly IEpicRepository _epics;
     private readonly IProjectAccessPolicy _access;
     private readonly IEngineerRepository _engineers;
-    private readonly INotificationRepository _notifications;
-    private readonly IEmailQueue _emailQueue;
     private readonly IAppSettings _settings;
+    private readonly INotificationDispatcher _notify;
 
-    public FlagBlockerHandler(ITaskRepository tasks, IAuditLogRepository audit, IRealtimeNotifier realtime,
-        IEpicRepository epics, IProjectAccessPolicy access, IEngineerRepository engineers,
-        INotificationRepository notifications, IEmailQueue emailQueue, IAppSettings settings)
+    public FlagBlockerHandler(
+        ITaskRepository tasks,
+        IAuditLogRepository audit,
+        IRealtimeNotifier realtime,
+        IEpicRepository epics,
+        IProjectAccessPolicy access,
+        IEngineerRepository engineers,
+        IAppSettings settings,
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _audit = audit;
         _realtime = realtime;
         _epics = epics;
         _access = access;
         _engineers = engineers;
-        _notifications = notifications;
-        _emailQueue = emailQueue;
         _settings = settings;
     }
 
@@ -88,10 +92,7 @@ public class FlagBlockerHandler : IRequestHandler<FlagBlockerCommand, ServiceRes
                 flaggedByName = flagger?.Name,
             });
 
-            var n = Notification.Create(assigneeId, NotificationKind.BlockerFlagged, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(assigneeId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(assigneeId, NotificationKind.BlockerFlagged, payload, ct: ct);
 
             var assignee = await _engineers.GetByIdAsync(assigneeId, ct);
             if (assignee is not null)
@@ -107,7 +108,7 @@ public class FlagBlockerHandler : IRequestHandler<FlagBlockerCommand, ServiceRes
                     {EmailTemplate.Button(taskLink, "View task")}
                     {EmailTemplate.Muted("This notification was sent because you are the assignee of this task.")}
                     """;
-                _emailQueue.Enqueue(assignee.Email, $"Blocker flagged: {task.Title}", EmailTemplate.Layout(body));
+                await _notify.EmailAsync(assignee.Id, NotificationKind.BlockerFlagged, new NotificationEmail(assignee.Email, $"Blocker flagged: {task.Title}", EmailTemplate.Layout(body)), ct);
             }
         }
 
@@ -147,10 +148,7 @@ public class FlagBlockerHandler : IRequestHandler<FlagBlockerCommand, ServiceRes
                 mentionedByName = actor?.Name,
             });
 
-            var n = Notification.Create(engineer.Id, NotificationKind.Mentioned, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(engineer.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(engineer.Id, NotificationKind.Mentioned, payload, ct: ct);
 
             var mentionedBy = actor is not null ? $" by <strong>{actor.Name}</strong>" : string.Empty;
             var emailBody = $"""
@@ -162,7 +160,7 @@ public class FlagBlockerHandler : IRequestHandler<FlagBlockerCommand, ServiceRes
                 {EmailTemplate.Button(taskLink, "View task")}
                 {EmailTemplate.Muted("This notification was sent because you were mentioned in a blocker.")}
                 """;
-            _emailQueue.Enqueue(engineer.Email, $"You were mentioned: {task.Title}", EmailTemplate.Layout(emailBody));
+            await _notify.EmailAsync(engineer.Id, NotificationKind.Mentioned, new NotificationEmail(engineer.Email, $"You were mentioned: {task.Title}", EmailTemplate.Layout(emailBody)), ct);
         }
     }
 }

@@ -50,6 +50,7 @@ public partial class PulseDbContext : DbContext
     public DbSet<VitalsResponse> VitalsResponses => Set<VitalsResponse>();
     public DbSet<OverworkOverride> OverworkOverrides => Set<OverworkOverride>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
     public DbSet<ThresholdSetting> ThresholdSettings => Set<ThresholdSetting>();
     public DbSet<DepartmentThresholdOverride> DepartmentThresholdOverrides => Set<DepartmentThresholdOverride>();

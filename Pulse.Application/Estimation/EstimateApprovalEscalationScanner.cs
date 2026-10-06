@@ -18,24 +18,24 @@ public class EstimateApprovalEscalationScanner : IRecurringJob
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
-    private readonly IEmailQueue _emailQueue;
+    private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
     private readonly OverworkThresholds _thresholds;
 
     public EstimateApprovalEscalationScanner(
-        IEstimationRepository estimation, ITaskRepository tasks, IEngineerRepository engineers, ITeamRepository teams,
-        INotificationRepository notifications, IRealtimeNotifier realtime, IEmailQueue emailQueue, IAppSettings settings,
-        OverworkThresholds thresholds)
+        IEstimationRepository estimation,
+        ITaskRepository tasks,
+        IEngineerRepository engineers,
+        ITeamRepository teams,
+        IAppSettings settings,
+        OverworkThresholds thresholds,
+        INotificationDispatcher notify)
     {
         _estimation = estimation;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
-        _notifications = notifications;
-        _realtime = realtime;
-        _emailQueue = emailQueue;
+        _notify = notify;
         _settings = settings;
         _thresholds = thresholds;
     }
@@ -89,10 +89,7 @@ public class EstimateApprovalEscalationScanner : IRecurringJob
                 teamLeadName = teamLead.Name,
             });
 
-            var n = Notification.Create(head.Id, NotificationKind.EstimateApprovalEscalated, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(head.Id, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(head.Id, NotificationKind.EstimateApprovalEscalated, payload, ct: ct);
 
             var body = $"""
                 <p>Hi {head.Name},</p>
@@ -103,7 +100,7 @@ public class EstimateApprovalEscalationScanner : IRecurringJob
                 {EmailTemplate.Button(taskLink, "Review estimate")}
                 {EmailTemplate.Muted("This notification was sent because you are the head of this engineer's department.")}
                 """;
-            _emailQueue.Enqueue(head.Email, $"Estimate approval overdue: {task.Title}", EmailTemplate.Layout(body));
+            await _notify.EmailAsync(head.Id, NotificationKind.EstimateApprovalEscalated, new NotificationEmail(head.Email, $"Estimate approval overdue: {task.Title}", EmailTemplate.Layout(body)), ct);
         }
     }
 }

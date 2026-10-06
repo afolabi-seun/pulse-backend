@@ -27,8 +27,7 @@ public class ReturnTaskToBacklogHandler : IRequestHandler<ReturnTaskToBacklogCom
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
     private readonly IProjectAccessPolicy _access;
-    private readonly INotificationRepository _notifications;
-    private readonly IRealtimeNotifier _realtime;
+    private readonly INotificationDispatcher _notify;
 
     public ReturnTaskToBacklogHandler(
         ITaskRepository tasks,
@@ -36,16 +35,14 @@ public class ReturnTaskToBacklogHandler : IRequestHandler<ReturnTaskToBacklogCom
         ITeamRepository teams,
         IAuditLogRepository audit,
         IProjectAccessPolicy access,
-        INotificationRepository notifications,
-        IRealtimeNotifier realtime)
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
         _audit = audit;
         _access = access;
-        _notifications = notifications;
-        _realtime = realtime;
     }
 
     public async Task<ServiceResult<TaskDto>> Handle(ReturnTaskToBacklogCommand cmd, CancellationToken ct)
@@ -89,11 +86,7 @@ public class ReturnTaskToBacklogHandler : IRequestHandler<ReturnTaskToBacklogCom
 
         if (previousAssigneeId.HasValue && previousAssigneeId.Value != cmd.ActorId)
         {
-            var n = Notification.Create(previousAssigneeId.Value, NotificationKind.TaskReturnedToBacklog,
-                JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }));
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(previousAssigneeId.Value, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(previousAssigneeId.Value, NotificationKind.TaskReturnedToBacklog, JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title }), ct: ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task));

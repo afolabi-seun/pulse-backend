@@ -22,25 +22,22 @@ public class RespondToQaRejectionHandler : IRequestHandler<RespondToQaRejectionC
 {
     private readonly ITaskRepository _tasks;
     private readonly IAuditLogRepository _audit;
-    private readonly IRealtimeNotifier _realtime;
     private readonly IProjectAccessPolicy _access;
     private readonly IEngineerRepository _engineers;
-    private readonly INotificationRepository _notifications;
+    private readonly INotificationDispatcher _notify;
 
     public RespondToQaRejectionHandler(
         ITaskRepository tasks,
         IAuditLogRepository audit,
-        IRealtimeNotifier realtime,
         IProjectAccessPolicy access,
         IEngineerRepository engineers,
-        INotificationRepository notifications)
+        INotificationDispatcher notify)
     {
+        _notify = notify;
         _tasks = tasks;
         _audit = audit;
-        _realtime = realtime;
         _access = access;
         _engineers = engineers;
-        _notifications = notifications;
     }
 
     public async Task<ServiceResult<TaskDto>> Handle(RespondToQaRejectionCommand cmd, CancellationToken ct)
@@ -79,10 +76,7 @@ public class RespondToQaRejectionHandler : IRequestHandler<RespondToQaRejectionC
                 respondedBy  = responder?.Name,
             });
 
-            var n = Notification.Create(reviewerId, NotificationKind.QaRejectionResponded, payload, NotificationChannel.InApp);
-            await _notifications.AddAsync(n, ct);
-            await _notifications.SaveChangesAsync(ct);
-            await _realtime.SendNotificationAsync(reviewerId, NotificationDto.From(n), ct);
+            await _notify.NotifyAsync(reviewerId, NotificationKind.QaRejectionResponded, payload, ct: ct);
         }
 
         return ServiceResult<TaskDto>.Ok(TaskDto.From(task, pendingRejectionRespondedByName: responder?.Name));

@@ -5,6 +5,7 @@ using Pulse.Domain.Teams;
 using FeedbackEntity = Pulse.Domain.Feedback.Feedback;
 using FluentAssertions;
 using Moq;
+using Pulse.UnitTests.Common;
 
 namespace Pulse.UnitTests.Feedback;
 
@@ -26,7 +27,7 @@ public class ReplyToFeedbackHandlerTests
 
     private ReplyToFeedbackHandler CreateHandler() => new(
         _feedback.Object, _engineers.Object, _teams.Object,
-        _notifications.Object, _realtime.Object, _emailQueue.Object, _settings.Object, _audit.Object);
+        TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object, _audit.Object);
 
     [Fact]
     public async Task Fails_with_NOT_FOUND_when_the_feedback_entry_does_not_exist()
