@@ -131,8 +131,13 @@ public class GetProjectTimeActivityHandler : IRequestHandler<GetProjectTimeActiv
         var items = new List<ProjectActivityItemDto>();
         if (!titlesHidden)
         {
-            // One row per task, then one per non-task category, each with who logged how much.
-            foreach (var group in rows.GroupBy(r => r.Entry.TaskId.HasValue ? (object)r.Entry.TaskId.Value : r.Entry.Category))
+            // One row per task, then one per non-task category — further split by that entry's own
+            // note when it has one (so e.g. "Sprint planning" and "1:1s" don't collapse into one
+            // undifferentiated "Meetings" bucket), and grouped back under the bare category label
+            // when it doesn't, same as before.
+            foreach (var group in rows.GroupBy(r => r.Entry.TaskId.HasValue
+                ? (object)r.Entry.TaskId.Value
+                : (r.Entry.Category, Note: r.Entry.Note?.Trim() ?? "")))
             {
                 var first = group.First();
                 var people = group.GroupBy(r => r.Entry.EngineerId)
@@ -149,7 +154,10 @@ public class GetProjectTimeActivityHandler : IRequestHandler<GetProjectTimeActiv
                 else
                 {
                     var category = Camel(first.Entry.Category.ToString());
-                    items.Add(new ProjectActivityItemDto(null, CategoryLabel.GetValueOrDefault(category, category), null, null,
+                    var baseLabel = CategoryLabel.GetValueOrDefault(category, category);
+                    var note = first.Entry.Note?.Trim();
+                    var label = string.IsNullOrEmpty(note) ? baseLabel : $"{baseLabel} — {note}";
+                    items.Add(new ProjectActivityItemDto(null, label, null, null,
                         people.Sum(p => p.Hours), people));
                 }
             }
