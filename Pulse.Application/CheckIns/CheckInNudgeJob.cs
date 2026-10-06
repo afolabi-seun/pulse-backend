@@ -6,7 +6,7 @@ namespace Pulse.Application.CheckIns;
 /// <summary>
 /// Evening nudge (18:00) — a softer follow-up for engineers who still haven't checked in by end of day.
 /// </summary>
-public class CheckInNudgeJob
+public class CheckInNudgeJob : IRecurringJob
 {
     private readonly ICheckInRepository _checkIns;
     private readonly IEngineerRepository _engineers;

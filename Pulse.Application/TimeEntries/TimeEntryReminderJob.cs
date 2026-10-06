@@ -9,7 +9,7 @@ namespace Pulse.Application.TimeEntries;
 /// this week. "Eligible" mirrors CapabilityRegistry.TimeEntrySubmitter exactly, so the reminder
 /// never nags a PMO or Executive user who isn't allowed to submit anyway.
 /// </summary>
-public class TimeEntryReminderJob
+public class TimeEntryReminderJob : IRecurringJob
 {
     private readonly ITimeEntryRepository _timeEntries;
     private readonly IEngineerRepository _engineers;

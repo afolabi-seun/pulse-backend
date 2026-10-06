@@ -4,7 +4,7 @@ using Pulse.Domain.Notifications;
 
 namespace Pulse.Application.Vitals;
 
-public class WeeklyVitalsPromptJob
+public class WeeklyVitalsPromptJob : IRecurringJob
 {
     private readonly IEngineerRepository _engineers;
     private readonly INotificationRepository _notifications;
