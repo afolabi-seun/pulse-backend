@@ -51,20 +51,23 @@ public static class TimeEntrySummaryCsvRenderer
         // ── Hours by Category/Task ───────────────────────────────────────────
         // Same breakdown as the "Hours by project" detail on screen — a category row's label
         // already carries its note when it has one (e.g. "Meetings — Sprint planning"), so two
-        // different meetings don't collapse into one undifferentiated line here either. Empty for
-        // the personal-tasks line, which names people but never task/category detail.
+        // different meetings don't collapse into one undifferentiated line here either. Every row
+        // is one task/category on one day (a task worked on three days is three rows), and rows are
+        // sorted by date first — most recent day first, then by project — so a day's entries sit
+        // together without needing a sub-header that would break the table's column count. Empty
+        // for the personal-tasks line, which names people but never task/category detail.
         if (details is { Count: > 0 })
         {
             sb.AppendLine();
             AppendLine(sb, "=== HOURS BY CATEGORY/TASK ===");
-            AppendLine(sb, "Project,Category/Task,Who Logged,Hours");
-            foreach (var project in details)
+            AppendLine(sb, "Date,Project,Category/Task,Who Logged,Hours");
+            var allItems = details
+                .SelectMany(project => project.Items.Select(item => (project.Name, item)))
+                .OrderByDescending(x => x.item.Date).ThenBy(x => x.Name).ThenByDescending(x => x.item.Hours);
+            foreach (var (projectName, item) in allItems)
             {
-                foreach (var item in project.Items)
-                {
-                    var whoLogged = string.Join(" | ", item.People.Select(p => $"{p.Name} {p.Hours}h"));
-                    AppendLine(sb, $"{Escape(project.Name)},{Escape(item.Label)},{Escape(whoLogged)},{item.Hours}");
-                }
+                var whoLogged = string.Join(" | ", item.People.Select(p => $"{p.Name} {p.Hours}h"));
+                AppendLine(sb, $"{item.Date:yyyy-MM-dd},{Escape(projectName)},{Escape(item.Label)},{Escape(whoLogged)},{item.Hours}");
             }
         }
 
