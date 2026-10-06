@@ -1,3 +1,6 @@
+using Pulse.Application.Integrations.GoogleChat;
+using Pulse.Application.Common;
+using MediatR;
 using System.Text.Json.Nodes;
 using Pulse.Api.Controllers;
 using Pulse.Application.Common.Interfaces;
@@ -17,6 +20,7 @@ public class GoogleChatEventsControllerTests
     private readonly Mock<IGoogleChatRequestVerifier> _verifier = new();
     private readonly Mock<IGoogleChatSpaceRepository> _spaces = new();
     private readonly Mock<IBackgroundJobClient> _jobs = new();
+    private readonly Mock<IMediator> _mediator = new();
 
     public GoogleChatEventsControllerTests()
     {
@@ -28,7 +32,7 @@ public class GoogleChatEventsControllerTests
         var ctx = new DefaultHttpContext();
         if (bearerToken is not null) ctx.Request.Headers.Authorization = $"Bearer {bearerToken}";
 
-        return new GoogleChatEventsController(_verifier.Object, _spaces.Object, _jobs.Object)
+        return new GoogleChatEventsController(_verifier.Object, _spaces.Object, _jobs.Object, _mediator.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = ctx },
         };
@@ -111,5 +115,45 @@ public class GoogleChatEventsControllerTests
 
         result.Should().BeOfType<OkObjectResult>();
         _jobs.Verify(j => j.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Never);
+    }
+    // ── Linking a space (multi-tenancy Phase 2c) ─────────────────────────────
+
+    private static JsonObject MessageBody(string argumentText) => new()
+    {
+        ["type"] = "MESSAGE",
+        ["space"] = new JsonObject { ["name"] = "spaces/A", ["displayName"] = "Alerts" },
+        ["message"] = new JsonObject
+        {
+            ["text"] = "@Pulse " + argumentText,
+            ["argumentText"] = argumentText,
+            ["thread"] = new JsonObject { ["name"] = "spaces/A/threads/1" },
+        },
+    };
+
+    [Theory]
+    [InlineData("link ABCD-2345", "ABCD-2345")]
+    [InlineData("  LINK abcd2345 ", "abcd2345")]
+    public async Task A_link_command_links_the_space_and_replies_in_it(string argumentText, string expectedCode)
+    {
+        _verifier.Setup(v => v.VerifyAsync("good", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _mediator.Setup(m => m.Send(It.IsAny<LinkGoogleChatSpaceCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ServiceResult<string>.Ok("Linked this space to Acme."));
+
+        var result = await CreateController("good").Receive(MessageBody(argumentText), default);
+
+        _mediator.Verify(m => m.Send(It.Is<LinkGoogleChatSpaceCommand>(c =>
+            c.SpaceId == "spaces/A" && c.DisplayName == "Alerts" && c.Code == expectedCode), It.IsAny<CancellationToken>()));
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(new { text = "Linked this space to Acme." });
+        _jobs.Verify(j => j.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Never, "a link command isn't a follow-up question");
+    }
+
+    [Fact]
+    public async Task An_ordinary_message_mentioning_link_is_not_a_link_command()
+    {
+        _verifier.Setup(v => v.VerifyAsync("good", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        await CreateController("good").Receive(MessageBody("can you link me to the dashboard?"), default);
+
+        _mediator.Verify(m => m.Send(It.IsAny<LinkGoogleChatSpaceCommand>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

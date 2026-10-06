@@ -19,13 +19,16 @@ public class GoogleChatMessenger : IGoogleChatMessenger
 
     private readonly HttpClient _http;
     private readonly IAppSettings _settings;
+    private readonly IGoogleChatSpaceRepository _spaces;
     private readonly ILogger<GoogleChatMessenger> _logger;
     private GoogleCredential? _credential;
 
-    public GoogleChatMessenger(HttpClient http, IAppSettings settings, ILogger<GoogleChatMessenger> logger)
+    public GoogleChatMessenger(HttpClient http, IAppSettings settings, IGoogleChatSpaceRepository spaces,
+        ILogger<GoogleChatMessenger> logger)
     {
         _http = http;
         _settings = settings;
+        _spaces = spaces;
         _logger = logger;
     }
 
@@ -33,6 +36,15 @@ public class GoogleChatMessenger : IGoogleChatMessenger
     {
         if (string.IsNullOrEmpty(_settings.GoogleChatServiceAccountJson))
             return null;
+
+        // Every organization shares the one Chat app, so the app itself could post anywhere it's been added.
+        // Only post to a space linked to the acting organization (the lookup is org-filtered): never to
+        // another organization's space, and never to an unlinked one (multi-tenancy Phase 2c).
+        if ((await _spaces.GetBySpaceIdAsync(spaceId, ct))?.OrganizationId is null)
+        {
+            _logger.LogWarning("Not posting to Google Chat space {SpaceId}: it isn't linked to this organization.", spaceId);
+            return null;
+        }
 
         try
         {

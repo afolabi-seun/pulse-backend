@@ -6,10 +6,10 @@ namespace Pulse.Application.Alerts.Queries;
 
 public record GoogleChatSpaceOptionDto(string SpaceId, string DisplayName);
 
-/// <summary>Every Google Chat space the app has actually been added to — the only ones an
-/// AlertRule can pick, since posting requires the app to already be a member (see
-/// GoogleChatSpace). Not owner-scoped, same reasoning as ListTeamsChannelsQuery had: which spaces
-/// the app knows about is server-wide, shared setup, not a per-engineer thing.</summary>
+/// <summary>The Google Chat spaces linked to the caller's organization — the only ones an AlertRule can
+/// pick, since posting requires the app to be a member and the space to be the org's own (see
+/// GoogleChatSpace, multi-tenancy Phase 2c; the org filter does the scoping). Not owner-scoped: which
+/// spaces an organization has linked is org-wide setup, not a per-engineer thing.</summary>
 public record ListGoogleChatSpacesQuery : IRequest<ServiceResult<IReadOnlyList<GoogleChatSpaceOptionDto>>>;
 
 public class ListGoogleChatSpacesHandler : IRequestHandler<ListGoogleChatSpacesQuery, ServiceResult<IReadOnlyList<GoogleChatSpaceOptionDto>>>

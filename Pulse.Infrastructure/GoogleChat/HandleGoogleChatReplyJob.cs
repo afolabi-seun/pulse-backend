@@ -15,21 +15,33 @@ public class HandleGoogleChatReplyJob
     private readonly IAlertRuleRepository _rules;
     private readonly IAlertExplainer _explainer;
     private readonly IGoogleChatMessenger _chat;
+    private readonly IGoogleChatSpaceRepository _spaces;
+    private readonly BackgroundOrganizationContext _organization;
 
     public HandleGoogleChatReplyJob(
         IGoogleChatThreadRepository threads,
         IAlertRuleRepository rules,
         IAlertExplainer explainer,
-        IGoogleChatMessenger chat)
+        IGoogleChatMessenger chat,
+        IGoogleChatSpaceRepository spaces,
+        BackgroundOrganizationContext organization)
     {
         _threads = threads;
         _rules = rules;
         _explainer = explainer;
         _chat = chat;
+        _spaces = spaces;
+        _organization = organization;
     }
 
     public async Task ExecuteAsync(string spaceId, string threadName, string question)
     {
+        // Act for the organization the space is linked to, so the lookups, the explainer's data and the
+        // reply are that org's. A space linked to no organization isn't anyone's to answer in.
+        var space = await _spaces.GetBySpaceIdAsync(spaceId);
+        if (space?.OrganizationId is not Guid organizationId) return;
+        _organization.OrganizationId = organizationId;
+
         var thread = await _threads.FindAsync(spaceId, threadName);
         if (thread is null) return; // not a thread Pulse started — ignore
 

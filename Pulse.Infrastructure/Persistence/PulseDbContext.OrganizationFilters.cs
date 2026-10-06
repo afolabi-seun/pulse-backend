@@ -85,7 +85,9 @@ public partial class PulseDbContext
         b.Entity<Project>().HasQueryFilter(p => CurrentOrganizationId == null || p.OrganizationId == CurrentOrganizationId);
         b.Entity<ThresholdSetting>().HasQueryFilter(s => CurrentOrganizationId == null || s.OrganizationId == CurrentOrganizationId);
         b.Entity<DepartmentThresholdOverride>().HasQueryFilter(d => CurrentOrganizationId == null || d.OrganizationId == CurrentOrganizationId);
+        // An unlinked space (null organization) is visible to no organization — only to unscoped work.
         b.Entity<GoogleChatSpace>().HasQueryFilter(s => CurrentOrganizationId == null || s.OrganizationId == CurrentOrganizationId);
+        b.Entity<GoogleChatLinkCode>().HasQueryFilter(c => CurrentOrganizationId == null || c.OrganizationId == CurrentOrganizationId);
         b.Entity<FailedEmail>().HasQueryFilter(e => CurrentOrganizationId == null || e.OrganizationId == CurrentOrganizationId);
         b.Entity<SlackInstallation>().HasQueryFilter(s => CurrentOrganizationId == null || s.OrganizationId == CurrentOrganizationId);
 
