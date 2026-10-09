@@ -64,6 +64,23 @@ public class ImportTasksHandlerTests
     }
 
     [Fact]
+    public async Task Row_with_an_unreadable_due_date_fails_naming_it_instead_of_claiming_it_is_missing()
+    {
+        var project = Project.Create("Alpha");
+        SetupProject(project);
+
+        var row = new ImportTaskRow(project.Name, "Has a date nobody could read", null, null, 3, null, TaskType.Bug, null, null, 2, null, "31/02/2026");
+        var cmd = new ImportTasksCommand([row], Guid.NewGuid(), null);
+
+        var result = await CreateHandler().Handle(cmd, default);
+
+        result.Data!.Created.Should().Be(0);
+        var failure = result.Data.Failures.Should().ContainSingle().Subject;
+        failure.Error.Should().Contain("31/02/2026").And.Contain("DD/MM/YYYY");
+        failure.Error.Should().NotContain("is required");
+    }
+
+    [Fact]
     public async Task Row_with_assignee_but_no_due_date_is_rejected()
     {
         // A due date becomes mandatory once a row carries enough shape to be scheduled — same
