@@ -93,6 +93,10 @@ public class GetTaskHandler : IRequestHandler<GetTaskQuery, ServiceResult<TaskDt
             pendingPrApprovalRequestedByName, pendingPrApprovalDelegatedToName,
             pendingPrApprovalApproverNames, canApprovePrApproval) with { IsPersonal = project?.PersonalOwnerId is not null };
 
+        // In QA with nothing to review it: the QA task was deleted (or never existed). The page offers a way back instead of a link to nowhere.
+        if (task.Status == Domain.Tasks.TaskStatus.InQa && (!task.QaTaskId.HasValue || await _tasks.GetByIdAsync(task.QaTaskId.Value, ct) is null))
+            dto = dto with { QaTaskMissing = true };
+
         // Latest person-made move of an existing due date, with the reason given. History is
         // eager-loaded by GetByIdAsync; entries without a reason (first-time sets, system shifts,
         // pre-rule history) are skipped.

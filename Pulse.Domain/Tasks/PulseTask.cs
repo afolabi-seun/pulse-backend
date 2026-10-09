@@ -300,6 +300,25 @@ public class PulseTask : Entity
         _history.Add(TaskHistory.Record(Id, "status", old, TaskStatus.InQa.ToString(), actorId));
     }
 
+    /// <summary>The QA task this task was waiting on no longer exists (it was deleted, or the link never pointed at a real row), so nothing can
+    /// accept or reject it and the task is stuck. Returns it to Active and drops the dead link, so it can be sent to QA again. Not a QA rejection:
+    /// no reactivation reason is set and no iteration counts.</summary>
+    public void ReturnFromQaWithoutQaTask(Guid actorId, string reason)
+    {
+        if (Status != TaskStatus.InQa)
+            throw new DomainException("Task is not currently in QA.");
+
+        var old = Status.ToString();
+        var previousQaTaskId = QaTaskId;
+        Status = TaskStatus.Active;
+        SentToQaAt = null;
+        QaTaskId = null;
+        ClearPendingRejection();
+        _history.Add(TaskHistory.Record(Id, "status", old, TaskStatus.Active.ToString(), actorId, reason: reason));
+        if (previousQaTaskId.HasValue)
+            _history.Add(TaskHistory.Record(Id, "qa_task_id", previousQaTaskId.Value.ToString(), null, actorId, reason: reason));
+    }
+
     public void AcceptQa(Guid actorId)
     {
         if (Status != TaskStatus.InQa)

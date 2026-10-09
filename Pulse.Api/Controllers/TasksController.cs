@@ -265,6 +265,16 @@ public class TasksController : ControllerBase
 
     public record SendToQaRequest(Guid? QaEngineerId = null);
 
+    /// <summary>Recovers a task stuck In QA because its QA task no longer exists: returns it to Active and drops the dead link so it can be sent to QA again.</summary>
+    /// <remarks>Refused (422) when the QA task does exist, or when the task is not in QA.</remarks>
+    [HttpPost("{id:guid}/recover-missing-qa")]
+    [ProducesResponseType(typeof(ApiResponse<TaskDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RecoverMissingQa(Guid id) =>
+        (await _mediator.Send(new RecoverMissingQaTaskCommand(id, GetActorId(), GetIp(), GetRole()))).ToActionResult();
+
     /// <summary>Sends a task to QA. Creates a linked [QA] task and sets the original to InQa status.</summary>
     /// <remarks>Task must have requiresQa set to true and must be in Active or Blocked status. An
     /// explicit QaEngineerId overrides the automatic reviewer pick; omit it to keep the previous
