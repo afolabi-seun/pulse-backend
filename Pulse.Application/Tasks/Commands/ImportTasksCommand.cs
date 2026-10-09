@@ -18,7 +18,9 @@ public record ImportTaskRow(
     string? AssigneeEmail,
     string? EpicName,
     int? Priority = null,
-    string? ExternalReference = null);
+    string? ExternalReference = null,
+    // The raw due-date text when the CSV had one that could not be read, so the row fails naming it instead of reporting a "missing" date.
+    string? UnreadableDueDate = null);
 
 public record ImportTasksCommand(
     IReadOnlyList<ImportTaskRow> Rows,
@@ -116,6 +118,12 @@ public class ImportTasksHandler : IRequestHandler<ImportTasksCommand, ServiceRes
             if (!projectMap.TryGetValue(row.ProjectName.Trim(), out var projectId))
             {
                 failures.Add(new ImportRowFailure(rowNum, $"Project '{row.ProjectName.Trim()}' not found or archived."));
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.UnreadableDueDate))
+            {
+                failures.Add(new ImportRowFailure(rowNum, $"Could not read the due date '{row.UnreadableDueDate.Trim()}'. {ImportDateParser.Hint}"));
                 continue;
             }
 
