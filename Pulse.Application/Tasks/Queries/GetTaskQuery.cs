@@ -31,7 +31,13 @@ public class GetTaskHandler : IRequestHandler<GetTaskQuery, ServiceResult<TaskDt
     {
         var task = await _tasks.GetByIdAsync(query.TaskId, ct);
         if (task is null)
-            return ServiceResult<TaskDto>.Fail("NOT_FOUND", $"Task '{query.TaskId}' not found.");
+        {
+            // An old link or notification to a task that has since been archived: say so rather than pretending it never existed.
+            var archived = await _tasks.GetByIdIncludingArchivedAsync(query.TaskId, ct);
+            return ServiceResult<TaskDto>.Fail("NOT_FOUND", archived is { IsArchived: true }
+                ? "This task has been archived. A project manager can restore it."
+                : $"Task '{query.TaskId}' not found.");
+        }
 
         // Executive/HR/Accountant bypass the shared, write-coupled ProjectAccessPolicy here — see the
         // matching comment in GetProjectQuery.

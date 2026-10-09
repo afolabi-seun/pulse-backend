@@ -96,6 +96,8 @@ public class TimeEntryRepository : ITimeEntryRepository
         // effective project comes from a left join to the task it references instead.
         // Guid.Empty stands in for "no project" — Dictionary<Guid?, TValue> throws on an actual
         // null key at runtime, so the sentinel is resolved back to null only at the DTO boundary.
+        // Archived tasks still resolve: without this their hours would lose their project and fall under "no project".
+        using var archivedVisible = _db.IncludeArchivedTasks();
         var rows = await query
             .GroupJoin(_db.Tasks, t => t.TaskId, task => (Guid?)task.Id, (t, tasks) => new { t, tasks })
             .SelectMany(x => x.tasks.DefaultIfEmpty(), (x, task) => new
@@ -113,7 +115,8 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyList<(TimeEntry Entry, Domain.Tasks.PulseTask? Task)>> GetEntriesByProjectInRangeAsync(
         DateOnly from, DateOnly to, IReadOnlyList<Guid> engineerIds, IReadOnlyList<Guid>? projectIds, CancellationToken ct = default)
     {
-        // Same effective-project rule as GetHoursByProjectInRangeAsync (Guid.Empty = no project).
+        // Same effective-project rule as GetHoursByProjectInRangeAsync (Guid.Empty = no project). Archived tasks still resolve (see above).
+        using var archivedVisible = _db.IncludeArchivedTasks();
         var rows = _db.TimeEntries
             .Where(t => t.Date >= from && t.Date <= to && engineerIds.Contains(t.EngineerId))
             .GroupJoin(_db.Tasks, t => t.TaskId, task => (Guid?)task.Id, (t, tasks) => new { t, tasks })

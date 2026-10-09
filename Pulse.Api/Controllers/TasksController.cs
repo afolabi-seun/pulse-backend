@@ -9,6 +9,7 @@ using Pulse.Application.Engineers;
 using Pulse.Application.Engineers.Queries;
 using Pulse.Application.Overwork;
 using Pulse.Application.Tasks;
+using Pulse.Application.Tasks.Archive;
 using Pulse.Application.Tasks.Commands;
 using Pulse.Application.Tasks.Queries;
 using Pulse.Domain.Tasks;
@@ -262,6 +263,52 @@ public class TasksController : ControllerBase
         var result = await _mediator.Send(new DeleteTaskCommand(id, GetActorId(), GetIp(), GetRole()));
         return result.IsSuccess ? NoContent() : result.ToActionResult();
     }
+
+    public record ArchiveTasksRequest(
+        DateOnly BaselineStart,
+        IReadOnlyList<Guid>? ProjectIds = null,
+        bool IncludeTouched = false,
+        bool DryRun = true,
+        string? Reason = null,
+        // Minutes from UTC of the local time the baseline day starts in (the admin's own); organizations are in different time zones.
+        int UtcOffsetMinutes = 0);
+
+    /// <summary>Archives every task created before a baseline day so the system's working data starts fresh from it. Reversible; nothing is deleted.</summary>
+    /// <remarks>
+    /// DryRun defaults to true: send DryRun=false with a Reason to actually archive. Tasks in personal projects are never touched. A task that has had any
+    /// activity since the baseline day began (history, comment, time logged) is kept unless IncludeTouched is set; a task and its QA task move together.
+    /// </remarks>
+    [HttpPost("archive")]
+    [RequiresCapability(CapabilityRegistry.PmoOnly)]
+    [ProducesResponseType(typeof(ApiResponse<ArchiveTasksResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ArchiveTasks([FromBody] ArchiveTasksRequest request) =>
+        (await _mediator.Send(new ArchiveTasksCommand(
+            request.BaselineStart, request.ProjectIds, request.IncludeTouched, request.DryRun, request.Reason,
+            GetActorId(), GetIp(), GetRole(), request.UtcOffsetMinutes))).ToActionResult();
+
+    /// <summary>Lists archived tasks, newest archived first.</summary>
+    [HttpGet("archived")]
+    [RequiresCapability(CapabilityRegistry.PmoOnly)]
+    [ProducesResponseType(typeof(ApiResponse<ArchivedTaskPage>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListArchivedTasks(
+        [FromQuery] Guid? projectId, [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 25) =>
+        (await _mediator.Send(new ListArchivedTasksQuery(projectId, search, page, pageSize))).ToActionResult();
+
+    /// <summary>Restores an archived task together with its QA task (or its parent, when given the QA task).</summary>
+    [HttpPost("{id:guid}/restore")]
+    [RequiresCapability(CapabilityRegistry.PmoOnly)]
+    [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RestoreTask(Guid id) =>
+        (await _mediator.Send(new RestoreTaskCommand(id, GetActorId(), GetIp(), GetRole()))).ToActionResult();
 
     public record SendToQaRequest(Guid? QaEngineerId = null);
 
