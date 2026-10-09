@@ -31,7 +31,13 @@ public class GetTaskHandler : IRequestHandler<GetTaskQuery, ServiceResult<TaskDt
     {
         var task = await _tasks.GetByIdAsync(query.TaskId, ct);
         if (task is null)
-            return ServiceResult<TaskDto>.Fail("NOT_FOUND", $"Task '{query.TaskId}' not found.");
+        {
+            // An old link or notification to a task that has since been archived: say so rather than pretending it never existed.
+            var archived = await _tasks.GetByIdIncludingArchivedAsync(query.TaskId, ct);
+            return ServiceResult<TaskDto>.Fail("NOT_FOUND", archived is { IsArchived: true }
+                ? "This task has been archived. A project manager can restore it."
+                : $"Task '{query.TaskId}' not found.");
+        }
 
         // Executive/HR/Accountant bypass the shared, write-coupled ProjectAccessPolicy here — see the
         // matching comment in GetProjectQuery.
@@ -92,6 +98,10 @@ public class GetTaskHandler : IRequestHandler<GetTaskQuery, ServiceResult<TaskDt
             pendingRejectionActor?.Name, pendingRejectionResponder?.Name,
             pendingPrApprovalRequestedByName, pendingPrApprovalDelegatedToName,
             pendingPrApprovalApproverNames, canApprovePrApproval) with { IsPersonal = project?.PersonalOwnerId is not null };
+
+        // In QA with nothing to review it: the QA task was deleted (or never existed). The page offers a way back instead of a link to nowhere.
+        if (task.Status == Domain.Tasks.TaskStatus.InQa && (!task.QaTaskId.HasValue || await _tasks.GetByIdAsync(task.QaTaskId.Value, ct) is null))
+            dto = dto with { QaTaskMissing = true };
 
         // Latest person-made move of an existing due date, with the reason given. History is
         // eager-loaded by GetByIdAsync; entries without a reason (first-time sets, system shifts,

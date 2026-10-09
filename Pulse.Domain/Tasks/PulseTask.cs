@@ -80,6 +80,14 @@ public class PulseTask : Entity
     public DateOnly? SentToQaAt { get; private set; }
     public DateTime ActivatedAt { get; private set; } = DateTime.UtcNow;
     public bool PausedByProject { get; private set; }
+
+    // Archived tasks are out of the system's working data: hidden from boards, lists, workload, escalations, health and reports (a global query filter,
+    // see TaskConfiguration) while the row, its history, comments and time entries are kept, and it can be restored. Not a status: archiving changes
+    // nothing about where the task was.
+    public DateTime? ArchivedAt { get; private set; }
+    public Guid? ArchivedById { get; private set; }
+    public string? ArchiveReason { get; private set; }
+    public bool IsArchived => ArchivedAt.HasValue;
     public TaskStatus? StatusBeforePause { get; private set; }
     public DateTime? PausedAt { get; private set; }
     public Guid? LoanedFromEngineerId { get; private set; }
@@ -298,6 +306,50 @@ public class PulseTask : Entity
         Status = TaskStatus.InQa;
         SentToQaAt = DateOnly.FromDateTime(DateTime.UtcNow);
         _history.Add(TaskHistory.Record(Id, "status", old, TaskStatus.InQa.ToString(), actorId));
+    }
+
+    /// <summary>The QA task this task was waiting on no longer exists (it was deleted, or the link never pointed at a real row), so nothing can
+    /// accept or reject it and the task is stuck. Returns it to Active and drops the dead link, so it can be sent to QA again. Not a QA rejection:
+    /// no reactivation reason is set and no iteration counts.</summary>
+    public void ReturnFromQaWithoutQaTask(Guid actorId, string reason)
+    {
+        if (Status != TaskStatus.InQa)
+            throw new DomainException("Task is not currently in QA.");
+
+        var old = Status.ToString();
+        var previousQaTaskId = QaTaskId;
+        Status = TaskStatus.Active;
+        SentToQaAt = null;
+        QaTaskId = null;
+        ClearPendingRejection();
+        _history.Add(TaskHistory.Record(Id, "status", old, TaskStatus.Active.ToString(), actorId, reason: reason));
+        if (previousQaTaskId.HasValue)
+            _history.Add(TaskHistory.Record(Id, "qa_task_id", previousQaTaskId.Value.ToString(), null, actorId, reason: reason));
+    }
+
+    /// <summary>Takes the task out of the working data without changing its status, history or anything about it. Reversible with <see cref="Restore"/>.</summary>
+    public void Archive(Guid actorId, string reason)
+    {
+        if (ArchivedAt.HasValue)
+            throw new DomainException("Task is already archived.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new DomainException("A reason is required to archive a task.");
+
+        ArchivedAt = DateTime.UtcNow;
+        ArchivedById = actorId;
+        ArchiveReason = reason.Trim();
+        _history.Add(TaskHistory.Record(Id, "archived", Status.ToString(), "archived", actorId, reason: ArchiveReason));
+    }
+
+    public void Restore(Guid actorId)
+    {
+        if (!ArchivedAt.HasValue)
+            throw new DomainException("Task is not archived.");
+
+        ArchivedAt = null;
+        ArchivedById = null;
+        ArchiveReason = null;
+        _history.Add(TaskHistory.Record(Id, "archived", "archived", null, actorId, reason: "Restored"));
     }
 
     public void AcceptQa(Guid actorId)
