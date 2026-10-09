@@ -12,6 +12,12 @@ public record ProjectTaskCounts(
     Guid? ActiveSprintId,
     int HighPriorityOpenCount = 0);
 
+/// <summary>A task considered for archiving. <see cref="TouchedSince"/> is true when something has happened to it since the baseline began,
+/// which marks it as live work rather than pilot-era leftovers.</summary>
+public record ArchiveCandidate(
+    Guid Id, Guid ProjectId, int TaskNumber, string Title, Domain.Tasks.TaskStatus Status,
+    Guid? AssigneeId, Guid? ParentTaskId, DateTime CreatedAt, bool TouchedSince);
+
 /// <summary>Raw counts behind an engineer's performance metrics for a date range — see PerformanceMetricsCalculator
 /// for how these turn into rates. TasksSentToQa/TasksQaRejected are keyed off "sent to QA within range",
 /// not "resolved within range", so a rejection can be counted against a task sent to QA slightly before
@@ -44,6 +50,25 @@ public record ProjectActivityEntry(
 public interface ITaskRepository
 {
     Task<PulseTask?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Also finds an archived task (to show it read-only, restore it, or archive it).</summary>
+    Task<PulseTask?> GetByIdIncludingArchivedAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Tasks created before <paramref name="createdBefore"/> that are not archived and not in a personal project, optionally limited to some
+    /// projects, each flagged when anything has happened to it since (<paramref name="touchedSince"/>: a history entry or comment at or after it, or
+    /// time logged on or after <paramref name="touchedSinceDate"/>).</summary>
+    Task<IReadOnlyList<ArchiveCandidate>> FindArchiveCandidatesAsync(
+        DateTime createdBefore, DateTime touchedSince, DateOnly touchedSinceDate, IReadOnlyList<Guid>? projectIds, CancellationToken ct = default);
+
+    /// <summary>The QA tasks of the given parents whatever their own creation date (a QA task is created when its parent is sent to QA, which can be
+    /// after the cutoff), with the same touched flag.</summary>
+    Task<IReadOnlyList<ArchiveCandidate>> FindQaTasksOfAsync(
+        IReadOnlyList<Guid> parentIds, DateTime touchedSince, DateOnly touchedSinceDate, CancellationToken ct = default);
+
+    /// <summary>A task and its QA tasks, archived or not (to restore them together).</summary>
+    Task<IReadOnlyList<PulseTask>> GetGroupIncludingArchivedAsync(Guid rootTaskId, CancellationToken ct = default);
+
+    Task<(IReadOnlyList<PulseTask> Items, int Total)> ListArchivedAsync(
+        Guid? projectId, string? search, int skip, int take, CancellationToken ct = default);
     Task<IReadOnlyList<PulseTask>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
     Task<(IReadOnlyList<PulseTask> Items, string? NextCursor)> ListAsync(
         Guid? projectId, Guid? assigneeId, Pulse.Domain.Tasks.TaskStatus? status,

@@ -39,9 +39,63 @@ public class TaskRepository : ITaskRepository
     public async Task<PulseTask?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.Tasks.Include(t => t.History).FirstOrDefaultAsync(t => t.Id == id, ct);
 
-    // No History include — this backs bulk title lookups (e.g. time entries), which never need it.
-    public async Task<IReadOnlyList<PulseTask>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default) =>
-        await _db.Tasks.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+    /// <summary>Like <see cref="GetByIdAsync"/> but also finds an archived task: to show it read-only, to restore it, or to archive it.</summary>
+    public async Task<PulseTask?> GetByIdIncludingArchivedAsync(Guid id, CancellationToken ct = default)
+    {
+        using var _ = _db.IncludeArchivedTasks();
+        return await _db.Tasks.Include(t => t.History).FirstOrDefaultAsync(t => t.Id == id, ct);
+    }
+
+    private IQueryable<ArchiveCandidate> ToCandidates(IQueryable<PulseTask> query, DateTime since, DateOnly sinceDate) =>
+        query.Select(t => new ArchiveCandidate(
+            t.Id, t.ProjectId, t.TaskNumber, t.Title, t.Status, t.AssigneeId, t.ParentTaskId, t.CreatedAt,
+            _db.TaskHistory.Any(h => h.TaskId == t.Id && h.ChangedAt >= since && h.Field != "archived")
+            || _db.TimeEntries.Any(e => e.TaskId == t.Id && e.Date >= sinceDate)
+            || _db.TaskComments.Any(c => c.TaskId == t.Id && c.CreatedAt >= since)));
+
+    public async Task<IReadOnlyList<ArchiveCandidate>> FindArchiveCandidatesAsync(
+        DateTime createdBefore, DateTime touchedSince, DateOnly touchedSinceDate, IReadOnlyList<Guid>? projectIds, CancellationToken ct = default)
+    {
+        var query = WithoutPersonal(_db.Tasks.Where(t => t.CreatedAt < createdBefore));
+        if (projectIds is { Count: > 0 })
+            query = query.Where(t => projectIds.Contains(t.ProjectId));
+        return await ToCandidates(query, touchedSince, touchedSinceDate).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ArchiveCandidate>> FindQaTasksOfAsync(
+        IReadOnlyList<Guid> parentIds, DateTime touchedSince, DateOnly touchedSinceDate, CancellationToken ct = default) =>
+        await ToCandidates(_db.Tasks.Where(t => t.ParentTaskId != null && parentIds.Contains(t.ParentTaskId.Value)), touchedSince, touchedSinceDate).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<PulseTask>> GetGroupIncludingArchivedAsync(Guid rootTaskId, CancellationToken ct = default)
+    {
+        using var _ = _db.IncludeArchivedTasks();
+        return await _db.Tasks.Include(t => t.History)
+            .Where(t => t.Id == rootTaskId || t.ParentTaskId == rootTaskId).ToListAsync(ct);
+    }
+
+    public async Task<(IReadOnlyList<PulseTask> Items, int Total)> ListArchivedAsync(
+        Guid? projectId, string? search, int skip, int take, CancellationToken ct = default)
+    {
+        using var scope = _db.IncludeArchivedTasks();
+        var query = _db.Tasks.Where(t => t.ArchivedAt != null);
+        if (projectId.HasValue) query = query.Where(t => t.ProjectId == projectId.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(t => t.Title.ToLower().Contains(q));
+        }
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderByDescending(t => t.ArchivedAt).ThenBy(t => t.TaskNumber).Skip(skip).Take(take).ToListAsync(ct);
+        return (items, total);
+    }
+
+    // No History include — this backs bulk title lookups (e.g. time entries), which never need it. Includes archived tasks: hours logged against one
+    // still show its title.
+    public async Task<IReadOnlyList<PulseTask>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    {
+        using var _ = _db.IncludeArchivedTasks();
+        return await _db.Tasks.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+    }
 
     public async Task<(IReadOnlyList<PulseTask> Items, string? NextCursor)> ListAsync(
         Guid? projectId, Guid? assigneeId, Domain.Tasks.TaskStatus? status,
@@ -890,6 +944,8 @@ public class TaskRepository : ITaskRepository
 
     public async Task<int> GetNextTaskNumberAsync(Guid projectId, CancellationToken ct = default)
     {
+        // Archived tasks keep their numbers (the number is unique per project), so they count here.
+        using var _ = _db.IncludeArchivedTasks();
         var max = await _db.Tasks.Where(t => t.ProjectId == projectId)
             .Select(t => (int?)t.TaskNumber).MaxAsync(ct);
         return (max ?? 0) + 1;

@@ -46,6 +46,29 @@ public partial class PulseDbContext
             var user => user.OrganizationId, // background work run for one org (Phase 1e), else unscoped
         };
 
+    private bool _archivedTasksVisible;
+
+    /// <summary>True while an <see cref="IncludeArchivedTasks"/> scope is open.</summary>
+    private bool ArchivedTasksVisible => _archivedTasksVisible;
+
+    /// <summary>
+    /// Lets queries run inside the scope see archived tasks. Archived tasks are hidden from every query by default (boards, lists, workload,
+    /// escalations, reports); the few callers that must see them — task numbering, so a number is never reused; time-entry joins, so hours stay
+    /// on their project; viewing, listing and restoring archived tasks — open this around the query. It is deliberately NOT IgnoreQueryFilters():
+    /// that would also drop the organization filter and show another organization's tasks.
+    /// </summary>
+    public IDisposable IncludeArchivedTasks()
+    {
+        var previous = _archivedTasksVisible;
+        _archivedTasksVisible = true;
+        return new ArchivedTasksScope(() => _archivedTasksVisible = previous);
+    }
+
+    private sealed class ArchivedTasksScope(Action restore) : IDisposable
+    {
+        public void Dispose() => restore();
+    }
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         StampOrganizationOnNewRows();
@@ -106,7 +129,8 @@ public partial class PulseDbContext
         b.Entity<AutomationRule>().HasQueryFilter(r => CurrentOrganizationId == null || Engineers.Any(e => e.Id == r.OwnerEngineerId));
 
         // ── Through a project ───────────────────────────────────────────────────
-        b.Entity<PulseTask>().HasQueryFilter(t => CurrentOrganizationId == null || Projects.Any(p => p.Id == t.ProjectId));
+        b.Entity<PulseTask>().HasQueryFilter(t => (ArchivedTasksVisible || t.ArchivedAt == null)
+            && (CurrentOrganizationId == null || Projects.Any(p => p.Id == t.ProjectId)));
         b.Entity<Epic>().HasQueryFilter(e => CurrentOrganizationId == null || Projects.Any(p => p.Id == e.ProjectId));
         b.Entity<WikiPage>().HasQueryFilter(w => CurrentOrganizationId == null || Projects.Any(p => p.Id == w.ProjectId));
         b.Entity<ProjectMember>().HasQueryFilter(m => CurrentOrganizationId == null || Projects.Any(p => p.Id == m.ProjectId));

@@ -62,6 +62,8 @@ public record TaskDto(
     DateTime? PrApprovedAt = null,
     DueDateChangeDto? DueDateChange = null,
     PointsChangeDto? PointsChange = null,
+    /// <summary>True when the task is in QA but its QA task does not exist, so nothing can accept it (task detail only).</summary>
+    bool QaTaskMissing = false,
     // True for a task in its owner's personal-tasks project (see Project.PersonalOwnerId) — a private to-do,
     // so the UI leaves out what only makes sense for team delivery (estimates, hand-offs, blockers).
     bool IsPersonal = false)

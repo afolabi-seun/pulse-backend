@@ -41,6 +41,14 @@ public class TaskConfiguration : IEntityTypeConfiguration<PulseTask>
             .HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.ParentTaskId).HasColumnName("parent_task_id");
         builder.Property(t => t.QaTaskId).HasColumnName("qa_task_id");
+        builder.Property(t => t.ArchivedAt).HasColumnName("archived_at");
+        builder.Property(t => t.ArchivedById).HasColumnName("archived_by_id");
+        builder.Property(t => t.ArchiveReason).HasColumnName("archive_reason").HasMaxLength(500);
+        builder.HasIndex(t => t.ArchivedAt).HasDatabaseName("ix_tasks_archived_at");
+        builder.Ignore(t => t.IsArchived);
+
+        // The "archived tasks are hidden" rule lives in PulseDbContext.ApplyOrganizationFilters, combined with the organization filter: a second
+        // HasQueryFilter here would silently replace that one.
         builder.Property(t => t.ReactivationReason).HasColumnName("reactivation_reason");
         builder.Property(t => t.ReactivatedByEngineerId).HasColumnName("reactivated_by_engineer_id");
         builder.Property(t => t.PendingRejectionReason).HasColumnName("pending_rejection_reason");

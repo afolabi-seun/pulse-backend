@@ -1916,4 +1916,71 @@ public class PulseTaskTests
 
         task.History.Should().NotContain(h => h.Field == "points");
     }
+
+    // ── Returning from QA when the QA task is gone ────────────────────────────
+
+    private static PulseTask InQaWithLink(out Guid qaTaskId)
+    {
+        var task = NewTask();
+        task.SetRequiresQa(true);
+        task.SendToQa(Guid.NewGuid());
+        qaTaskId = Guid.NewGuid();
+        task.SetQaTaskId(qaTaskId);
+        return task;
+    }
+
+    [Fact]
+    public void ReturnFromQaWithoutQaTask_puts_the_task_back_to_Active_and_drops_the_dead_link()
+    {
+        var task = InQaWithLink(out _);
+
+        task.ReturnFromQaWithoutQaTask(Guid.NewGuid(), "Its QA task was deleted");
+
+        task.Status.Should().Be(DomainTaskStatus.Active);
+        task.QaTaskId.Should().BeNull();
+        task.SentToQaAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void ReturnFromQaWithoutQaTask_is_not_a_QA_rejection()
+    {
+        var task = InQaWithLink(out _);
+
+        task.ReturnFromQaWithoutQaTask(Guid.NewGuid(), "Its QA task was deleted");
+
+        task.ReactivationReason.Should().BeNull("no reviewer rejected anything, so no iteration is counted");
+        task.ReactivatedByEngineerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ReturnFromQaWithoutQaTask_records_the_status_change_and_the_lost_link_with_the_reason()
+    {
+        var task = InQaWithLink(out var qaTaskId);
+
+        task.ReturnFromQaWithoutQaTask(Guid.NewGuid(), "Its QA task was deleted");
+
+        task.History.Should().Contain(h => h.Field == "status" && h.NewValue == "Active" && h.Reason == "Its QA task was deleted");
+        task.History.Should().Contain(h => h.Field == "qa_task_id" && h.OldValue == qaTaskId.ToString() && h.NewValue == null);
+    }
+
+    [Fact]
+    public void ReturnFromQaWithoutQaTask_works_when_the_link_itself_was_never_set()
+    {
+        var task = NewTask();
+        task.SetRequiresQa(true);
+        task.SendToQa(Guid.NewGuid());   // In QA, no QaTaskId
+
+        task.ReturnFromQaWithoutQaTask(Guid.NewGuid(), "x");
+
+        task.Status.Should().Be(DomainTaskStatus.Active);
+        task.History.Should().NotContain(h => h.Field == "qa_task_id");
+    }
+
+    [Fact]
+    public void ReturnFromQaWithoutQaTask_throws_when_the_task_is_not_in_QA()
+    {
+        var act = () => NewTask().ReturnFromQaWithoutQaTask(Guid.NewGuid(), "x");
+
+        act.Should().Throw<DomainException>().WithMessage("*not currently in QA*");
+    }
 }
