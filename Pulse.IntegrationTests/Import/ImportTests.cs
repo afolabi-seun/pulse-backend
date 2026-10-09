@@ -222,6 +222,34 @@ public class ImportTests : IntegrationTestBase, IClassFixture<PulseWebApplicatio
     }
 
     [Fact]
+    public async Task Import_tasks_reads_day_first_dates_and_names_one_it_cannot_read()
+    {
+        await SeedEngineerAsync("imp_tasks_dates@pulse.io", Roles.ProjectManager);
+        var client = await AuthenticatedClientAsync("imp_tasks_dates@pulse.io");
+        var project = await SeedProjectAsync("Day first dates");
+
+        // 16/10 only makes sense day-first (there is no month 16); 09/10 is the one a month-first reading would silently turn into 10 September.
+        const string csv =
+            "project_name,title,points,due_date,priority,type,assignee_email\r\n" +
+            "Day first dates,Sixteenth,3,16/10/2026,3,Bug,\r\n" +
+            "Day first dates,Ninth,3,09/10/2026,2,Bug,\r\n" +
+            "Day first dates,Impossible,3,31/02/2026,2,Bug,\r\n";
+
+        var response = await client.PostAsync("/api/v1/import/tasks", Csv(csv));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = (await response.Content.ReadFromJsonAsync<ApiResponse<ImportResult>>())!.Data!;
+        result.Created.Should().Be(2);
+        result.Failures.Should().ContainSingle(f => f.Error.Contains("31/02/2026"));
+
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Pulse.Infrastructure.Persistence.PulseDbContext>();
+        var due = db.Tasks.Where(t => t.ProjectId == project.Id).ToDictionary(t => t.Title, t => t.DueDate);
+        due["Sixteenth"].Should().Be(new DateOnly(2026, 10, 16));
+        due["Ninth"].Should().Be(new DateOnly(2026, 10, 9));
+    }
+
+    [Fact]
     public async Task Import_tasks_handles_quoted_description_spanning_multiple_lines()
     {
         await SeedEngineerAsync("imp_tasks_multiline@pulse.io", Roles.ProjectManager);

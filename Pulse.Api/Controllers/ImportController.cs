@@ -7,6 +7,7 @@ using Pulse.Api.Common;
 using Pulse.Application.Backlog;
 using Pulse.Application.Common;
 using Pulse.Application.Projects.Commands;
+using Pulse.Application.Tasks;
 using Pulse.Application.Tasks.Commands;
 using Pulse.Application.Users.Commands;
 using Pulse.Domain.Tasks;
@@ -259,7 +260,10 @@ public class ImportController : ControllerBase
 
             // A missing/invalid due date is left null rather than defaulted — an invented
             // "today" reads as a real commitment and hides that the row needs grooming.
-            DateOnly? dueDate = DateOnly.TryParse(dueDateStr, out var parsedDate) ? parsedDate : null;
+            // Parsed strictly (ImportDateParser), never with the server's culture: a day-first date like 16/10/2026 must not fail, and 09/10/2026
+            // must not silently become 10 September. A non-blank value that still cannot be read is reported on its row, not treated as missing.
+            DateOnly? dueDate = ImportDateParser.TryParse(dueDateStr, out var parsedDate) ? parsedDate : null;
+            var unreadableDueDate = dueDate is null && !string.IsNullOrWhiteSpace(dueDateStr) ? dueDateStr : null;
 
             // Blank is left null (no priority set) rather than defaulted; an out-of-range value is
             // passed through as-is so ImportTasksHandler's own range check can report it as a
@@ -281,7 +285,8 @@ public class ImportController : ControllerBase
                 string.IsNullOrWhiteSpace(assigneeEmail) ? null : assigneeEmail,
                 string.IsNullOrWhiteSpace(epicName) ? null : epicName,
                 priority,
-                string.IsNullOrWhiteSpace(extRef) ? null : extRef));
+                string.IsNullOrWhiteSpace(extRef) ? null : extRef,
+                unreadableDueDate));
         }
         return rows;
     }
