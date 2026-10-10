@@ -11,4 +11,7 @@ public interface IGoogleChatMessenger
     /// Slack reply threads against a message's ts — or null when nothing could be posted: no
     /// credentials configured, or the call failed. Never throws.</summary>
     Task<string?> PostToSpaceAsync(string spaceId, string text, string? threadName = null, CancellationToken ct = default);
+
+    /// <summary>Posts into a person's own direct-message space with Pulse (personal notifications). Never throws.</summary>
+    Task<string?> PostToDirectMessageAsync(string dmSpace, string text, CancellationToken ct = default);
 }

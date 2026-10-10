@@ -16,5 +16,8 @@ public static class TestNotifications
             (notifications ?? new Mock<INotificationRepository>()).Object,
             (realtime ?? new Mock<IRealtimeNotifier>()).Object,
             (email ?? new Mock<IEmailQueue>()).Object,
-            new Mock<INotificationPreferenceRepository>().Object);
+            new Mock<INotificationPreferenceRepository>().Object,
+            new Mock<IPersonalChatSettingsRepository>().Object, // nobody has chosen a chat channel
+            new Mock<IChatNotificationQueue>().Object,
+            new Mock<IAppSettings>().Object);
 }

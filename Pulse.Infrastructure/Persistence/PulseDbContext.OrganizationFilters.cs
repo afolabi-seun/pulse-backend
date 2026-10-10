@@ -118,6 +118,7 @@ public partial class PulseDbContext
         b.Entity<RefreshToken>().HasQueryFilter(r => CurrentOrganizationId == null || Engineers.Any(e => e.Id == r.EngineerID));
         b.Entity<Notification>().HasQueryFilter(n => CurrentOrganizationId == null || Engineers.Any(e => e.Id == n.UserId));
         b.Entity<NotificationPreference>().HasQueryFilter(p => CurrentOrganizationId == null || Engineers.Any(e => e.Id == p.EngineerId));
+        b.Entity<PersonalChatSettings>().HasQueryFilter(s => CurrentOrganizationId == null || Engineers.Any(e => e.Id == s.EngineerId));
         b.Entity<AuditLogEntry>().HasQueryFilter(a => CurrentOrganizationId == null || Engineers.Any(e => e.Id == a.ActorId));
         b.Entity<CheckIn>().HasQueryFilter(c => CurrentOrganizationId == null || Engineers.Any(e => e.Id == c.EngineerId));
         b.Entity<TimeEntry>().HasQueryFilter(t => CurrentOrganizationId == null || Engineers.Any(e => e.Id == t.EngineerId));
