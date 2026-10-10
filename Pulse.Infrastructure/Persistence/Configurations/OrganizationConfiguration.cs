@@ -15,6 +15,8 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
         builder.Property(o => o.Slug).HasColumnName("slug").HasMaxLength(50).IsRequired();
         builder.Property(o => o.BillingEmail).HasColumnName("billing_email").HasMaxLength(256);
         builder.Property(o => o.IsActive).HasColumnName("is_active").IsRequired();
+        builder.Property(o => o.BrandColor).HasColumnName("brand_color").HasMaxLength(7);
+        builder.Property(o => o.LogoUpdatedAt).HasColumnName("logo_updated_at");
         builder.Property(o => o.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.HasIndex(o => o.Slug).IsUnique().HasDatabaseName("ux_organizations_slug");
