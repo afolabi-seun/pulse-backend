@@ -7,7 +7,13 @@ namespace Pulse.Application.Organizations.Queries;
 /// <summary>The caller's own organization — for showing its name in the app.</summary>
 public record GetCurrentOrganizationQuery : IRequest<ServiceResult<CurrentOrganizationDto>>;
 
-public record CurrentOrganizationDto(Guid Id, string Name, string Slug);
+/// <param name="BrandColor">#RRGGBB, or null for Pulse's own colour.</param>
+/// <param name="LogoVersion">Changes whenever the logo does (null: no logo) — fetch GET /organization/logo when set.</param>
+public record CurrentOrganizationDto(Guid Id, string Name, string Slug, string? BrandColor, string? LogoVersion)
+{
+    public static CurrentOrganizationDto From(Pulse.Domain.Organizations.Organization o) =>
+        new(o.Id, o.Name, o.Slug, o.BrandColor, o.LogoUpdatedAt?.Ticks.ToString());
+}
 
 public class GetCurrentOrganizationHandler : IRequestHandler<GetCurrentOrganizationQuery, ServiceResult<CurrentOrganizationDto>>
 {
@@ -25,6 +31,6 @@ public class GetCurrentOrganizationHandler : IRequestHandler<GetCurrentOrganizat
         var organization = _currentUser.OrganizationId is Guid id ? await _organizations.GetByIdAsync(id, ct) : null;
         return organization is null
             ? ServiceResult<CurrentOrganizationDto>.Fail("NOT_FOUND", "Organization not found.")
-            : ServiceResult<CurrentOrganizationDto>.Ok(new CurrentOrganizationDto(organization.Id, organization.Name, organization.Slug));
+            : ServiceResult<CurrentOrganizationDto>.Ok(CurrentOrganizationDto.From(organization));
     }
 }

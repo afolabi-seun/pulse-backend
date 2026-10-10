@@ -27,4 +27,14 @@ public class OrganizationRepository : IOrganizationRepository
 
     public async Task AddAsync(Organization organization, CancellationToken ct = default) =>
         await _db.Organizations.AddAsync(organization, ct);
+
+    public Task<OrganizationLogo?> GetLogoAsync(Guid organizationId, CancellationToken ct = default) =>
+        _db.OrganizationLogos.FirstOrDefaultAsync(l => l.OrganizationId == organizationId, ct);
+
+    public async Task AddLogoAsync(OrganizationLogo logo, CancellationToken ct = default) =>
+        await _db.OrganizationLogos.AddAsync(logo, ct);
+
+    public void RemoveLogo(OrganizationLogo logo) => _db.OrganizationLogos.Remove(logo);
+
+    public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

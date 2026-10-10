@@ -21,6 +21,11 @@ public class Organization : Entity
     public string Slug { get; private set; } = string.Empty;
     public string? BillingEmail { get; private set; }
     public bool IsActive { get; private set; } = true;
+    /// <summary>The organization's accent colour as #RRGGBB, or null for Pulse's own. Applied to the app's
+    /// primary colour for everyone in the organization.</summary>
+    public string? BrandColor { get; private set; }
+    /// <summary>When the logo last changed (null: no logo) — also the cache key the app uses to refetch it.</summary>
+    public DateTime? LogoUpdatedAt { get; private set; }
 
     private Organization() { }
 
@@ -50,6 +55,19 @@ public class Organization : Entity
             throw new ArgumentException("Organization name is required.", nameof(name));
         Name = name.Trim();
     }
+
+    public static bool IsValidBrandColor(string? color) =>
+        color is { Length: 7 } && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit);
+
+    /// <summary>Sets the accent colour (#RRGGBB), or clears it with null.</summary>
+    public void SetBrandColor(string? color)
+    {
+        if (color is not null && !IsValidBrandColor(color))
+            throw new ArgumentException("Brand colour must be a hex colour like #B8893B.", nameof(color));
+        BrandColor = color?.ToUpperInvariant();
+    }
+
+    public void MarkLogoChanged(bool hasLogo) => LogoUpdatedAt = hasLogo ? DateTime.UtcNow : null;
 
     public void SetBillingEmail(string? billingEmail) =>
         BillingEmail = string.IsNullOrWhiteSpace(billingEmail) ? null : billingEmail.Trim();

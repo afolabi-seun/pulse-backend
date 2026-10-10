@@ -103,6 +103,7 @@ public partial class PulseDbContext
     {
         // ── Carry organization_id directly ──────────────────────────────────────
         b.Entity<Organization>().HasQueryFilter(o => CurrentOrganizationId == null || o.Id == CurrentOrganizationId);
+        b.Entity<OrganizationLogo>().HasQueryFilter(l => CurrentOrganizationId == null || l.OrganizationId == CurrentOrganizationId);
         b.Entity<Team>().HasQueryFilter(t => CurrentOrganizationId == null || t.OrganizationId == CurrentOrganizationId);
         b.Entity<Engineer>().HasQueryFilter(e => CurrentOrganizationId == null || e.OrganizationId == CurrentOrganizationId);
         b.Entity<Project>().HasQueryFilter(p => CurrentOrganizationId == null || p.OrganizationId == CurrentOrganizationId);
