@@ -10,4 +10,8 @@ public interface IOrganizationRepository
     /// with an organization would only ever see their own.</summary>
     Task<IReadOnlyList<(Organization Organization, int EngineerCount)>> ListWithEngineerCountsAsync(CancellationToken ct = default);
     Task AddAsync(Organization organization, CancellationToken ct = default);
+    Task<OrganizationLogo?> GetLogoAsync(Guid organizationId, CancellationToken ct = default);
+    Task AddLogoAsync(OrganizationLogo logo, CancellationToken ct = default);
+    void RemoveLogo(OrganizationLogo logo);
+    Task SaveChangesAsync(CancellationToken ct = default);
 }
