@@ -17,8 +17,16 @@ public class TimeEntry : Entity
 
     private TimeEntry() { }
 
+    /// <summary>
+    /// Hours are kept to two decimals, the column's own precision. Anything finer (a paste, a client that sends 3.4200000000000004, a timer) is rounded
+    /// half-up here, so an entry holds the same value in memory, in the response and after a reload, and a sliver like 0.004, which the database would
+    /// silently round to a zero-hour row, is refused instead of stored.
+    /// </summary>
+    public static decimal NormalizeHours(decimal hours) => Math.Round(hours, 2, MidpointRounding.AwayFromZero);
+
     public static TimeEntry Log(Guid engineerId, DateOnly date, TimeEntryCategory category, Guid? taskId, Guid? projectId, decimal hours, string? note, Guid? subtaskId = null)
     {
+        hours = NormalizeHours(hours);
         Validate(category, taskId, projectId, hours, subtaskId);
         return new()
         {
@@ -35,6 +43,7 @@ public class TimeEntry : Entity
 
     public void Update(DateOnly date, TimeEntryCategory category, Guid? taskId, Guid? projectId, decimal hours, string? note, Guid? subtaskId = null)
     {
+        hours = NormalizeHours(hours);
         Validate(category, taskId, projectId, hours, subtaskId);
         Date = date;
         Category = category;
