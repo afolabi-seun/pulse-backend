@@ -27,8 +27,8 @@ public class WikiController : ControllerBase
 
     public WikiController(IMediator mediator) => _mediator = mediator;
 
-    public record CreateWikiPageRequest(string Title, string Content, bool RestrictedToMembers = false);
-    public record UpdateWikiPageRequest(string Title, string Content, bool? RestrictedToMembers = null);
+    public record CreateWikiPageRequest(string Title, string Content, bool RestrictedToMembers = false, string? Category = null);
+    public record UpdateWikiPageRequest(string Title, string Content, bool? RestrictedToMembers = null, string? Category = null);
 
     /// <summary>Lists wiki pages for a project, alphabetically by title.</summary>
     [HttpGet]
@@ -81,7 +81,7 @@ public class WikiController : ControllerBase
     public async Task<IActionResult> CreatePage(Guid projectId, [FromBody] CreateWikiPageRequest request)
     {
         var result = await _mediator.Send(new CreateWikiPageCommand(
-            projectId, request.Title, request.Content, GetActorId(), GetRole(), request.RestrictedToMembers));
+            projectId, request.Title, request.Content, GetActorId(), GetRole(), request.RestrictedToMembers, request.Category));
         return result.ToCreatedResult("GetWikiPage", new { projectId, pageId = result.Data?.Id });
     }
 
@@ -94,7 +94,7 @@ public class WikiController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdatePage(Guid projectId, Guid pageId, [FromBody] UpdateWikiPageRequest request) =>
         (await _mediator.Send(new UpdateWikiPageCommand(
-            projectId, pageId, request.Title, request.Content, GetActorId(), GetRole(), request.RestrictedToMembers))).ToActionResult();
+            projectId, pageId, request.Title, request.Content, GetActorId(), GetRole(), request.RestrictedToMembers, request.Category))).ToActionResult();
 
     /// <summary>Permanently deletes a wiki page.</summary>
     [HttpDelete("{pageId:guid}")]

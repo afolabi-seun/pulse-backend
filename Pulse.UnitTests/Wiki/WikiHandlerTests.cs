@@ -475,4 +475,100 @@ public class WikiHandlerTests
         await handler.Handle(new UpdateWikiPageCommand(page.ProjectId, page.Id, "T3", "C3", Guid.NewGuid(), "project_manager", false), default);
         page.RestrictedToMembers.Should().BeFalse();
     }
+
+    // ── Page type (category) ──────────────────────────────────────────────────
+
+    private CreateWikiPageHandler CreateHandler() => new(_wiki.Object, _projects.Object, _access.Object);
+    private UpdateWikiPageHandler UpdateHandler() => new(_wiki.Object, _access.Object);
+
+    [Fact]
+    public async Task CreateWikiPage_with_no_type_is_General()
+    {
+        var project = AnyProject();
+        _projects.Setup(r => r.GetByIdAsync(project.Id, default)).ReturnsAsync(project);
+
+        var result = await CreateHandler().Handle(new CreateWikiPageCommand(project.Id, "Notes", "x", Guid.NewGuid()), default);
+
+        result.Data!.Category.Should().Be("general");
+    }
+
+    [Theory]
+    [InlineData("architecture", "architecture")]
+    [InlineData("Architecture", "architecture")]
+    [InlineData("  PMO ", "pmo")]
+    [InlineData("", "general")]
+    public async Task CreateWikiPage_stores_the_chosen_type_normalised(string given, string expected)
+    {
+        var project = AnyProject();
+        _projects.Setup(r => r.GetByIdAsync(project.Id, default)).ReturnsAsync(project);
+
+        var result = await CreateHandler().Handle(
+            new CreateWikiPageCommand(project.Id, "Notes", "x", Guid.NewGuid(), Category: given), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Category.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task CreateWikiPage_refuses_a_type_that_is_not_on_the_list_and_saves_nothing()
+    {
+        var project = AnyProject();
+        _projects.Setup(r => r.GetByIdAsync(project.Id, default)).ReturnsAsync(project);
+
+        var result = await CreateHandler().Handle(
+            new CreateWikiPageCommand(project.Id, "Notes", "x", Guid.NewGuid(), Category: "marketing"), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be("VALIDATION_ERROR");
+        result.ErrorMessage.Should().Contain("marketing").And.Contain("architecture");
+        _wiki.Verify(r => r.AddAsync(It.IsAny<WikiPage>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateWikiPage_can_change_the_type()
+    {
+        var page = AnyPage();
+        _wiki.Setup(r => r.GetByIdAsync(page.Id, default)).ReturnsAsync(page);
+
+        var result = await UpdateHandler().Handle(
+            new UpdateWikiPageCommand(page.ProjectId, page.Id, "T", "C", Guid.NewGuid(), Category: "development"), default);
+
+        result.Data!.Category.Should().Be("development");
+    }
+
+    [Fact]
+    public async Task UpdateWikiPage_with_no_type_leaves_the_type_alone()
+    {
+        var page = WikiPage.Create(Guid.NewGuid(), "T", "C", Guid.NewGuid(), category: "product");
+        _wiki.Setup(r => r.GetByIdAsync(page.Id, default)).ReturnsAsync(page);
+
+        var result = await UpdateHandler().Handle(
+            new UpdateWikiPageCommand(page.ProjectId, page.Id, "New", "New", Guid.NewGuid()), default);
+
+        result.Data!.Category.Should().Be("product");
+    }
+
+    [Fact]
+    public async Task UpdateWikiPage_refuses_an_unknown_type_without_touching_the_page_or_saving_a_revision()
+    {
+        var page = WikiPage.Create(Guid.NewGuid(), "T", "C", Guid.NewGuid(), category: "product");
+        _wiki.Setup(r => r.GetByIdAsync(page.Id, default)).ReturnsAsync(page);
+
+        var result = await UpdateHandler().Handle(
+            new UpdateWikiPageCommand(page.ProjectId, page.Id, "New", "New", Guid.NewGuid(), Category: "nonsense"), default);
+
+        result.ErrorCode.Should().Be("VALIDATION_ERROR");
+        page.Category.Should().Be("product");
+        page.Title.Should().Be("T");
+        _wiki.Verify(r => r.AddRevisionAsync(It.IsAny<WikiPageRevision>(), default), Times.Never);
+    }
+
+    [Fact]
+    public void WikiCategory_lists_the_agreed_types_and_recognises_only_those()
+    {
+        WikiCategory.All.Should().BeEquivalentTo(["development", "architecture", "product", "pmo", "functional", "general"]);
+        WikiCategory.IsValid("pmo").Should().BeTrue();
+        WikiCategory.IsValid("PMO").Should().BeFalse("values are stored lower-case; Normalize is what folds case");
+        WikiCategory.IsValid(null).Should().BeFalse();
+    }
 }
