@@ -1223,6 +1223,14 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("author_id");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("general")
+                        .HasColumnName("category");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")

@@ -471,13 +471,13 @@ public sealed class DemoSeeder(PulseDbContext db, IPasswordHasher hasher) : IDem
         var wikiPages = new List<WikiPage>
         {
             WikiPage.Create(cibProject.Id, "CIB Architecture Overview",
-                "# CIB Architecture\n\nService boundaries, auth, and the payment-approval flow.", carol.Id),
+                "# CIB Architecture\n\nService boundaries, auth, and the payment-approval flow.", carol.Id, category: WikiCategory.Architecture),
             WikiPage.Create(cibProject.Id, "Auth & JWT Runbook",
-                "# Auth Runbook\n\nJWT rotation, session handling, and the login-incident playbook.", alice.Id),
+                "# Auth Runbook\n\nJWT rotation, session handling, and the login-incident playbook.", alice.Id, category: WikiCategory.Development),
             WikiPage.Create(omsProject.Id, "OMS Delivery Pipeline",
-                "# OMS Pipeline\n\nEvent ingestion → templating → SMS/WhatsApp delivery.", david.Id),
+                "# OMS Pipeline\n\nEvent ingestion → templating → SMS/WhatsApp delivery.", david.Id, category: WikiCategory.Development),
             WikiPage.Create(omsProject.Id, "Template Authoring Guide",
-                "# Templates\n\nAuthoring, placeholders, approval (separation of duties), and versioning.", diana.Id),
+                "# Templates\n\nAuthoring, placeholders, approval (separation of duties), and versioning.", diana.Id, category: WikiCategory.Functional),
         };
         db.WikiPages.AddRange(wikiPages);
         await db.SaveChangesAsync(ct);
