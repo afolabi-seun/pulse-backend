@@ -34,6 +34,9 @@ public static class NotificationKind
     public const string SubtaskRecalled   = "subtask_recalled";
     public const string OverworkDigest    = "overwork_digest";
     public const string Mentioned         = "mentioned";
+    /// <summary>Sent to a task's assignee and creator when an Executive comments on it — executives are read-only everywhere else, so a comment
+    /// is how they give direction, and it would otherwise go unseen unless they @mention someone. See AddCommentHandler.</summary>
+    public const string ExecutiveCommented = "executive_commented";
     public const string AlertRuleTriggered = "alert_rule_triggered";
     /// <summary>Sent to a task's previous assignee when AutomationRuleScanner reassigns it away from
     /// them for having sat Blocked too long — distinct from TaskAssigned, which goes to the new
