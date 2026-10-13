@@ -29,7 +29,7 @@ public class WikiPageRepository : IWikiRepository
     {
         var rows = await _db.WikiPages
             .Join(_db.Projects.Where(p => p.PersonalOwnerId == null), w => w.ProjectId, p => p.Id,
-                (w, p) => new { w.Id, w.Title, ProjectId = p.Id, ProjectName = p.Name, w.CreatedAt, w.UpdatedAt, w.RestrictedToMembers })
+                (w, p) => new { w.Id, w.Title, ProjectId = p.Id, ProjectName = p.Name, w.CreatedAt, w.UpdatedAt, w.RestrictedToMembers, w.Category })
             .OrderBy(r => r.ProjectName)
             .ThenBy(r => r.Title)
             .ThenBy(r => r.Id)
@@ -37,7 +37,7 @@ public class WikiPageRepository : IWikiRepository
             .ToListAsync(ct);
 
         return rows
-            .Select(r => new WikiIndexEntryDto(r.Id, r.Title, r.ProjectId, r.ProjectName, r.CreatedAt, r.UpdatedAt, r.RestrictedToMembers))
+            .Select(r => new WikiIndexEntryDto(r.Id, r.Title, r.ProjectId, r.ProjectName, r.CreatedAt, r.UpdatedAt, r.RestrictedToMembers, r.Category))
             .ToList();
     }
 

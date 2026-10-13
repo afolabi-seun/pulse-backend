@@ -18,6 +18,7 @@ public class WikiPageConfiguration : IEntityTypeConfiguration<WikiPage>
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         builder.Property(p => p.RestrictedToMembers).HasColumnName("restricted_to_members").IsRequired().HasDefaultValue(false);
+        builder.Property(p => p.Category).HasColumnName("category").HasMaxLength(20).IsRequired().HasDefaultValue("general");
 
         builder.HasIndex(p => p.ProjectId).HasDatabaseName("ix_wiki_pages_project_id");
     }

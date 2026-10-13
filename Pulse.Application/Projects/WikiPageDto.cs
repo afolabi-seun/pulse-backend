@@ -2,15 +2,15 @@ using Pulse.Domain.Projects;
 
 namespace Pulse.Application.Projects;
 
-public record WikiPageSummaryDto(Guid Id, string Title, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false)
+public record WikiPageSummaryDto(Guid Id, string Title, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false, string Category = "general")
 {
-    public static WikiPageSummaryDto From(WikiPage p) => new(p.Id, p.Title, p.CreatedAt, p.UpdatedAt, p.RestrictedToMembers);
+    public static WikiPageSummaryDto From(WikiPage p) => new(p.Id, p.Title, p.CreatedAt, p.UpdatedAt, p.RestrictedToMembers, p.Category);
 }
 
-public record WikiPageDto(Guid Id, Guid ProjectId, string Title, string Content, Guid AuthorId, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false)
+public record WikiPageDto(Guid Id, Guid ProjectId, string Title, string Content, Guid AuthorId, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false, string Category = "general")
 {
     public static WikiPageDto From(WikiPage p) =>
-        new(p.Id, p.ProjectId, p.Title, p.Content, p.AuthorId, p.CreatedAt, p.UpdatedAt, p.RestrictedToMembers);
+        new(p.Id, p.ProjectId, p.Title, p.Content, p.AuthorId, p.CreatedAt, p.UpdatedAt, p.RestrictedToMembers, p.Category);
 }
 
 public record WikiPageRevisionDto(Guid Id, string Title, DateTime CreatedAt)
@@ -24,4 +24,4 @@ public record WikiPageRevisionContentDto(Guid Id, string Title, string Content, 
         new(r.Id, r.Title, r.Content, r.CreatedAt);
 }
 
-public record WikiIndexEntryDto(Guid PageId, string PageTitle, Guid ProjectId, string ProjectName, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false);
+public record WikiIndexEntryDto(Guid PageId, string PageTitle, Guid ProjectId, string ProjectName, DateTime CreatedAt, DateTime? UpdatedAt, bool RestrictedToMembers = false, string Category = "general");
