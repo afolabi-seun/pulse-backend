@@ -34,7 +34,8 @@ public class GetTaskMentionCandidatesHandler : IRequestHandler<GetTaskMentionCan
             return ServiceResult<IReadOnlyList<EngineerDto>>.Fail("NOT_FOUND", $"Task '{query.TaskId}' not found.");
 
         // Same org-wide read-only viewer bypass GetTaskQuery uses — the task drawer's comment box
-        // loads these candidates for any viewer who can open the task, even though they can't post.
+        // loads these candidates for any viewer who can open the task (an Executive can post a comment, so needs the list; HR and Accountant
+        // can only read).
         var allowed = Roles.IsOrgReadOnlyViewer(query.ActorRole)
             || await _access.CanViewTaskAsync(query.TaskId, query.ActorId, query.ActorRole, ct);
         if (!allowed)

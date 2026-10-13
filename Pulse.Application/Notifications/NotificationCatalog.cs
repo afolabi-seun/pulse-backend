@@ -62,6 +62,7 @@ public static class NotificationCatalog
 
         // Collaboration
         new(NotificationKind.Mentioned, "Collaboration", "Mentioned", "Someone mentioned you in a comment"),
+        new(NotificationKind.ExecutiveCommented, "Collaboration", "Executive comment", "An executive commented on a task you are assigned to or created"),
         new(NotificationKind.FeedbackReplied, "Collaboration", "Feedback replied", "Someone replied to feedback you sent"),
         new(ProjectFollowStarted, "Collaboration", "Project followed", "A department head started following a project your team works on"),
         new(ProjectFollowEnded, "Collaboration", "Project unfollowed", "A department head stopped following a project your team works on"),
