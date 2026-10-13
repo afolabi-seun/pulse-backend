@@ -67,7 +67,7 @@ public class LogTimeEntryHandler : IRequestHandler<LogTimeEntryCommand, ServiceR
         await _timeEntries.SaveChangesAsync(ct);
 
         await _audit.LogAsync("TIME_ENTRY_LOGGED", cmd.ActorId, cmd.IpAddress,
-            $"Engineer {cmd.EngineerId} logged {cmd.Hours}h for {cmd.Date:O}", ct);
+            $"Engineer {cmd.EngineerId} logged {entry.Hours}h for {cmd.Date:O}", ct);
 
         return ServiceResult<TimeEntryDto>.Ok(TimeEntryDto.From(entry));
     }

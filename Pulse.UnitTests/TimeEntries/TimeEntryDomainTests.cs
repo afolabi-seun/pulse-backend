@@ -96,4 +96,60 @@ public class TimeEntryDomainTests
 
         entry.SubtaskId.Should().Be(subtaskId);
     }
+
+    // ── Hours are kept to two decimals ────────────────────────────────────────
+
+    private static TimeEntry LogMeeting(decimal hours) =>
+        TimeEntry.Log(Guid.NewGuid(), DateOnly.FromDateTime(DateTime.UtcNow), TimeEntryCategory.Meeting, null, null, hours, null);
+
+    [Theory]
+    [InlineData(3.4200000000000004, 3.42)]   // what a floating-point client sends
+    [InlineData(1.005, 1.01)]                // half rounds up, not to even
+    [InlineData(2.675, 2.68)]
+    [InlineData(0.125, 0.13)]
+    [InlineData(1.5, 1.5)]
+    [InlineData(0.01, 0.01)]
+    public void Log_rounds_hours_to_two_decimals_so_the_value_matches_what_the_database_will_hold(double given, double expected)
+    {
+        LogMeeting((decimal)given).Hours.Should().Be((decimal)expected);
+    }
+
+    [Theory]
+    [InlineData(0.004)]
+    [InlineData(0.0049)]
+    public void Log_refuses_a_sliver_that_would_round_to_zero_instead_of_storing_a_zero_hour_entry(double given)
+    {
+        var act = () => LogMeeting((decimal)given);
+
+        act.Should().Throw<DomainException>().WithMessage("*greater than zero*");
+    }
+
+    [Fact]
+    public void Log_still_refuses_more_than_24_hours_but_allows_exactly_24()
+    {
+        LogMeeting(24.004m).Hours.Should().Be(24m);      // rounds to 24.00
+        var act = () => LogMeeting(24.01m);
+        act.Should().Throw<DomainException>().WithMessage("*24 hours*");
+    }
+
+    [Fact]
+    public void Update_rounds_hours_the_same_way()
+    {
+        var entry = LogMeeting(1m);
+
+        entry.Update(entry.Date, TimeEntryCategory.Meeting, null, null, 3.4200000000000004m, null);
+
+        entry.Hours.Should().Be(3.42m);
+    }
+
+    [Fact]
+    public void Update_refuses_a_sliver_and_leaves_the_entry_unchanged()
+    {
+        var entry = LogMeeting(2m);
+
+        var act = () => entry.Update(entry.Date, TimeEntryCategory.Meeting, null, null, 0.004m, null);
+
+        act.Should().Throw<DomainException>();
+        entry.Hours.Should().Be(2m);
+    }
 }
