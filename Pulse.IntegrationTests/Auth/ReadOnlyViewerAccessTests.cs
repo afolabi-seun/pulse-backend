@@ -184,29 +184,22 @@ public class ReadOnlyViewerAccessTests : IntegrationTestBase, IClassFixture<Puls
     [Theory]
     [InlineData(Roles.HR)]
     [InlineData(Roles.Accountant)]
-    public async Task HR_and_accountant_can_create_a_self_assigned_task_only_in_a_project_they_are_a_member_of(string role)
+    public async Task HR_and_accountant_cannot_create_a_task_in_a_real_project_even_one_they_belong_to(string role)
     {
+        // Creating tasks is for the PMO, team leads and department heads. HR and Accountant have personal to-dos instead.
         var viewer = await SeedEngineerAsync(EmailFor(role, "create"), role);
         var client = await AuthenticatedClientAsync(EmailFor(role, "create"));
         var other = await SeedEngineerAsync(EmailFor(role, "create_other"), Roles.Engineer);
         var team = await SeedTeamAsync($"ROV create team {role}");
         var memberProject = await SeedProjectAsync($"ROV member project {role}", team.Id);
-        var otherProject = await SeedProjectAsync($"ROV non-member project {role}", team.Id);
         await SeedProjectMemberAsync(memberProject.Id, viewer.Id);
 
-        object Payload(Guid projectId) => new
+        var response = await client.PostAsJsonAsync("/api/v1/tasks", new
         {
-            title = "Filed by a read-only role", points = 5, assigneeId = other.Id, projectId,
+            title = "Filed by a read-only role", points = 5, assigneeId = other.Id, projectId = memberProject.Id,
             dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)).ToString("yyyy-MM-dd"),
-        };
+        });
 
-        var allowed = await client.PostAsJsonAsync("/api/v1/tasks", Payload(memberProject.Id));
-        var denied = await client.PostAsJsonAsync("/api/v1/tasks", Payload(otherProject.Id));
-
-        allowed.StatusCode.Should().Be(HttpStatusCode.Created);
-        var created = (await allowed.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
-        created.AssigneeId.Should().Be(viewer.Id, "below Team Lead a task can only be assigned to its creator");
-        created.Points.Should().Be(0, "an estimate from a role below Team Lead is dropped");
-        denied.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

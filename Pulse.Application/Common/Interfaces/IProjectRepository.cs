@@ -35,6 +35,8 @@ public interface IProjectRepository
 
     /// <summary>Returns delivered story points grouped by week (Monday) for the 6-week rolling window ending today.</summary>
     Task<IReadOnlyList<WeeklyThroughputPoint>> GetWeeklyThroughputAsync(Guid projectId, CancellationToken ct = default);
+    /// <summary>Points earned per week over the last six weeks on this project's tasks, beside the delivered series.</summary>
+    Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedAsync(Guid projectId, CancellationToken ct = default);
 
     // ── Project membership ───────────────────────────────────────────────────
     Task<IReadOnlyList<ProjectMemberDto>> ListMembersAsync(Guid projectId, CancellationToken ct = default);

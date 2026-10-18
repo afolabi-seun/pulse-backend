@@ -26,6 +26,8 @@ public static class DepartmentThresholdResolver
             PointScale             = global.PointScale,
             PriorityScale          = global.PriorityScale,
             UseProgressInWorkload  = global.UseProgressInWorkload,
+            UseEarnedPointsInVelocity = global.UseEarnedPointsInVelocity,
+            EngineersCanCreateTasks = global.EngineersCanCreateTasks,
         };
     }
 }

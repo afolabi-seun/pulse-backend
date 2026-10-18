@@ -22,7 +22,9 @@ public record UpdateThresholdsCommand(
     IReadOnlyList<PriorityScaleEntryDto>? PriorityScale,
     Guid ActorId,
     string? IpAddress,
-    bool? UseProgressInWorkload = null) : IRequest<ServiceResult<ThresholdsDto>>;
+    bool? UseProgressInWorkload = null,
+    bool? UseEarnedPointsInVelocity = null,
+    bool? EngineersCanCreateTasks = null) : IRequest<ServiceResult<ThresholdsDto>>;
 
 /// <summary>
 /// Persists threshold changes to DB and updates the in-memory singleton so existing background jobs
@@ -71,6 +73,18 @@ public class UpdateThresholdsHandler : IRequestHandler<UpdateThresholdsCommand, 
         {
             _thresholds.UseProgressInWorkload = cmd.UseProgressInWorkload.Value;
             await _repo.SetAsync("UseProgressInWorkload", cmd.UseProgressInWorkload.Value ? "true" : "false", ct);
+        }
+
+        if (cmd.UseEarnedPointsInVelocity.HasValue)
+        {
+            _thresholds.UseEarnedPointsInVelocity = cmd.UseEarnedPointsInVelocity.Value;
+            await _repo.SetAsync("UseEarnedPointsInVelocity", cmd.UseEarnedPointsInVelocity.Value ? "true" : "false", ct);
+        }
+
+        if (cmd.EngineersCanCreateTasks.HasValue)
+        {
+            _thresholds.EngineersCanCreateTasks = cmd.EngineersCanCreateTasks.Value;
+            await _repo.SetAsync("EngineersCanCreateTasks", cmd.EngineersCanCreateTasks.Value ? "true" : "false", ct);
         }
 
         if (cmd.EscalationT3Days.HasValue)
@@ -147,6 +161,8 @@ public class UpdateThresholdsHandler : IRequestHandler<UpdateThresholdsCommand, 
             _thresholds.QaLeadTimeDays,
             _thresholds.PointScale.Select(e => new PointScaleEntryDto(e.Value, e.Label, e.TimeGuide)).ToList(),
             _thresholds.PriorityScale.Select(e => new PriorityScaleEntryDto(e.Value, e.Label, e.Criteria)).ToList(),
-            _thresholds.UseProgressInWorkload));
+            _thresholds.UseProgressInWorkload,
+            _thresholds.UseEarnedPointsInVelocity,
+            _thresholds.EngineersCanCreateTasks));
     }
 }

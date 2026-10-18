@@ -76,6 +76,15 @@ public class OverworkThresholds
     // a task that is mostly done weighs less. Off until the PMO turns it on: it changes the workload and overwork figures. See WorkloadPoints.
     public bool UseProgressInWorkload { get; set; }
 
+    // When on, "points delivered" in velocity and performance (an engineer's, a team's, a project's and the organization's delivered-points windows)
+    // means points earned in the period instead of points on tasks finished in it. Off until the PMO turns it on: it changes those figures. Earned
+    // points are recorded and shown beside Delivered either way. Sprint velocity and burndown, which are sprint-bound, are not affected.
+    public bool UseEarnedPointsInVelocity { get; set; }
+
+    // Creating a task is for the PMO, team leads, department heads and the product roles. When on, engineers and designers may also create tasks on
+    // projects they can access: each lands assigned to its creator with no estimate, for their lead to point. Off until the PMO turns it on.
+    public bool EngineersCanCreateTasks { get; set; }
+
     // QA hand-off — business days given to review, starting the day a task is sent to QA
     // (see BusinessDays.Add; independent of the original task's own due date)
     public int QaLeadTimeDays { get; set; } = 2;
@@ -141,6 +150,10 @@ public class OverworkThresholds
             EscalationT3MinHours = t3MinH;
         if (settings.TryGetValue("EscalationT1MinHours", out var v10) && double.TryParse(v10, out var t1MinH))
             EscalationT1MinHours = t1MinH;
+        if (settings.TryGetValue("UseEarnedPointsInVelocity", out var vVel) && bool.TryParse(vVel, out var useEarned))
+            UseEarnedPointsInVelocity = useEarned;
+        if (settings.TryGetValue("EngineersCanCreateTasks", out var vCreate) && bool.TryParse(vCreate, out var engineersCreate))
+            EngineersCanCreateTasks = engineersCreate;
         if (settings.TryGetValue("UseProgressInWorkload", out var vProg) && bool.TryParse(vProg, out var useProgress))
             UseProgressInWorkload = useProgress;
         if (settings.TryGetValue("ReportingBaseline", out var vBase) && DateOnly.TryParse(vBase, out var baseline))

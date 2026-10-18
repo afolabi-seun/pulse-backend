@@ -28,5 +28,7 @@ public class GetThresholdsHandler : IRequestHandler<GetThresholdsQuery, ServiceR
             _thresholds.QaLeadTimeDays,
             _thresholds.PointScale.Select(e => new PointScaleEntryDto(e.Value, e.Label, e.TimeGuide)).ToList(),
             _thresholds.PriorityScale.Select(e => new PriorityScaleEntryDto(e.Value, e.Label, e.Criteria)).ToList(),
-            _thresholds.UseProgressInWorkload)));
+            _thresholds.UseProgressInWorkload,
+            _thresholds.UseEarnedPointsInVelocity,
+            _thresholds.EngineersCanCreateTasks)));
 }

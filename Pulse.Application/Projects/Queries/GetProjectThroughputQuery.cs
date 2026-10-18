@@ -33,7 +33,11 @@ public class GetProjectThroughputHandler : IRequestHandler<GetProjectThroughputQ
             return ServiceResult<IReadOnlyList<ThroughputWeekDto>>.Fail("FORBIDDEN", "You do not have access to this project.");
 
         var points = await _projects.GetWeeklyThroughputAsync(query.ProjectId, ct);
-        var result = points.Select(p => new ThroughputWeekDto(p.WeekOf, p.PointsDelivered)).ToList();
+        var earned = (await _projects.GetWeeklyEarnedAsync(query.ProjectId, ct)).ToDictionary(e => e.WeekOf, e => e.PointsEarned);
+        var delivered = points.ToDictionary(p => p.WeekOf, p => p.PointsDelivered);
+        // A week with only earned points (work moved but nothing finished) is still a week worth showing.
+        var result = delivered.Keys.Union(earned.Keys).OrderBy(w => w)
+            .Select(w => new ThroughputWeekDto(w, delivered.GetValueOrDefault(w), earned.GetValueOrDefault(w))).ToList();
 
         return ServiceResult<IReadOnlyList<ThroughputWeekDto>>.Ok(result);
     }
