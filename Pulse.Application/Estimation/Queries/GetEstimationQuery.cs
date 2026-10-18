@@ -15,14 +15,16 @@ public class GetEstimationHandler : IRequestHandler<GetEstimationQuery, ServiceR
     private readonly ITeamRepository _teams;
     private readonly ITaskRepository _tasks;
     private readonly IProjectAccessPolicy _access;
+    private readonly IProjectRepository _projects;
 
-    public GetEstimationHandler(IEstimationRepository estimation, IEngineerRepository engineers, ITeamRepository teams, ITaskRepository tasks, IProjectAccessPolicy access)
+    public GetEstimationHandler(IEstimationRepository estimation, IEngineerRepository engineers, ITeamRepository teams, ITaskRepository tasks, IProjectAccessPolicy access, IProjectRepository projects)
     {
         _estimation = estimation;
         _engineers = engineers;
         _teams = teams;
         _tasks = tasks;
         _access = access;
+        _projects = projects;
     }
 
     public async Task<ServiceResult<EstimationDto>> Handle(GetEstimationQuery request, CancellationToken ct)
@@ -58,7 +60,8 @@ public class GetEstimationHandler : IRequestHandler<GetEstimationQuery, ServiceR
             }
 
             var task = await _tasks.GetByIdAsync(request.TaskId, ct);
-            var state = await EstimationApproval.ResolveApproversAsync(task?.AssigneeId, session.EscalatedToHead, session.SubmittedBy, _engineers, _teams, ct);
+            var state = task is null ? null : await EstimationApproval.ResolveApproversAsync(
+                task.ProjectId, task.AssigneeId, EstimationApproval.ReachedBy(session), session.SubmittedBy, _projects, _engineers, _teams, ct);
             approverNames = state?.Approvers.Select(a => a.Name).ToList();
             canApprove = request.ActorId != session.SubmittedBy && (state is null || state.Approvers.Count == 0
                 ? CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(request.ActorRole)
@@ -67,6 +70,7 @@ public class GetEstimationHandler : IRequestHandler<GetEstimationQuery, ServiceR
 
         return ServiceResult<EstimationDto>.Ok(new EstimationDto(
             request.TaskId, session.IsRevealed, voterVotes,
-            session.PendingApprovalPoints, submittedByName, approverNames, canApprove, session.EscalatedToHead));
+            session.PendingApprovalPoints, submittedByName, approverNames, canApprove, session.EscalatedToHead || session.EscalatedToPmo,
+            session.EscalatedToPmo));
     }
 }

@@ -17,5 +17,7 @@ public class TaskEstimationSessionConfiguration : IEntityTypeConfiguration<TaskE
         builder.Property(s => s.SubmittedBy).HasColumnName("submitted_by");
         builder.Property(s => s.SubmittedAt).HasColumnName("submitted_at");
         builder.Property(s => s.EscalatedToHead).HasColumnName("escalated_to_head").IsRequired().HasDefaultValue(false);
+        builder.Property(s => s.EscalatedToHeadAt).HasColumnName("escalated_to_head_at");
+        builder.Property(s => s.EscalatedToPmo).HasColumnName("escalated_to_pmo").IsRequired().HasDefaultValue(false);
     }
 }

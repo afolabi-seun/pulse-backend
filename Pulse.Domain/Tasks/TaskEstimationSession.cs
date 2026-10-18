@@ -19,6 +19,12 @@ public class TaskEstimationSession
     /// <see cref="SubmitForApproval"/>. Independent of the due-date EscalationEvent table — see
     /// planning-poker-approval-tiers-spec.md for why that table isn't reused here.</summary>
     public bool EscalatedToHead { get; private set; }
+    /// <summary>When the request opened up to the department head, so the PMO's wait is counted from then. Null for requests that escalated
+    /// before this was recorded, or that never needed the Team Lead tier at all.</summary>
+    public DateTime? EscalatedToHeadAt { get; private set; }
+    /// <summary>Whether the request has also opened up to the PMO, the last tier — set by <see cref="EscalateToPmo"/>, reset on every fresh
+    /// <see cref="SubmitForApproval"/>.</summary>
+    public bool EscalatedToPmo { get; private set; }
 
     private TaskEstimationSession() { }
 
@@ -38,7 +44,7 @@ public class TaskEstimationSession
 
     /// <summary>Team Lead+ submits the accepted card value for the assignee's department head to
     /// approve — this no longer writes points directly (see AcceptEstimateHandler's old behavior).</summary>
-    public void SubmitForApproval(int points, Guid actorId)
+    public void SubmitForApproval(int points, Guid actorId, DateTime? at = null)
     {
         if (!IsRevealed)
             throw new DomainException("Cards must be revealed before submitting an estimate for approval.");
@@ -47,19 +53,31 @@ public class TaskEstimationSession
 
         PendingApprovalPoints = points;
         SubmittedBy = actorId;
-        SubmittedAt = DateTime.UtcNow;
+        SubmittedAt = at ?? DateTime.UtcNow;
         EscalatedToHead = false;
+        EscalatedToHeadAt = null;
+        EscalatedToPmo = false;
     }
 
     /// <summary>Opens up approval to the department head in addition to the Team Lead, once the
     /// Team Lead hasn't acted within the configured grace period — see
     /// EstimateApprovalEscalationScanner. The Team Lead keeps the ability to approve/reject too;
     /// this adds a backstop rather than transferring the request.</summary>
-    public void EscalateToHead()
+    public void EscalateToHead(DateTime? at = null)
     {
         if (!PendingApprovalPoints.HasValue)
             throw new DomainException("No estimate is pending approval for this task.");
         EscalatedToHead = true;
+        EscalatedToHeadAt = at ?? DateTime.UtcNow;
+    }
+
+    /// <summary>Opens approval up to the PMO as well, when neither the Team Lead nor the department head has acted. Everyone already able to
+    /// approve keeps that ability — see EstimateApprovalEscalationScanner.</summary>
+    public void EscalateToPmo()
+    {
+        if (!PendingApprovalPoints.HasValue)
+            throw new DomainException("No estimate is pending approval for this task.");
+        EscalatedToPmo = true;
     }
 
     /// <summary>Clears the pending request without resetting votes/reveal — used when a rejection
@@ -70,5 +88,7 @@ public class TaskEstimationSession
         SubmittedBy = null;
         SubmittedAt = null;
         EscalatedToHead = false;
+        EscalatedToHeadAt = null;
+        EscalatedToPmo = false;
     }
 }

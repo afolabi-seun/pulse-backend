@@ -5,64 +5,68 @@ using Pulse.Domain.Engineers;
 
 namespace Pulse.Application.Estimation;
 
-public enum ApprovalStage { TeamLead, DepartmentHead }
+public enum ApprovalStage { TeamLead, DepartmentHead, Pmo }
 
-/// <summary>Who may currently act on a pending estimate, and which tier that is — <see cref="Stage"/>
-/// is <see cref="ApprovalStage.TeamLead"/> only while the Team Lead is the sole eligible approver;
-/// once escalated it's <see cref="ApprovalStage.DepartmentHead"/> even though the Team Lead is still
-/// included in <see cref="Approvers"/> (escalation adds the head, it doesn't revoke the Team Lead).</summary>
+/// <summary>Who may currently act on a pending estimate, and which tier that is — <see cref="Stage"/> is the highest tier now open. Escalation adds
+/// people, it never takes the earlier tier away: once the head is added the Team Lead can still act, and once the PMO is added so can both.</summary>
 public record ApprovalState(IReadOnlyList<Engineer> Approvers, ApprovalStage Stage);
 
-/// <summary>Who may approve or reject a pending Planning Poker estimate — tiered: the assignee's own
-/// Team Lead first, with the department head(s) as a backstop once <paramref name="escalatedToHead"/>
-/// (set by EstimateApprovalEscalationScanner after a grace period) or when there's no Team-Lead tier
-/// to begin with (the assignee IS a Team Lead, or has no resolvable Team Lead at all) — or, when no
-/// department head can be resolved either, a Team Lead+ fallback, so a task never ends up with an
-/// estimate nobody can act on. See docs/planning-poker-approval-tiers-spec.md.
+/// <summary>Who may approve or reject a pending Planning Poker estimate — tiered, and found through the team and department that OWN the task's project
+/// (see <see cref="TaskStakeholders"/>), not the assignee's own: the owning team's lead first, then once <paramref name="reached"/> says so the
+/// owning department's head(s), then the PMO. A tier with nobody in it is skipped — the Team Lead tier too when the assignee IS a lead, since there is
+/// no lead above a lead — and if neither a lead nor a head can be found the request goes straight to the PMO, so it never waits on nobody. When even
+/// the PMO is empty, a Team Lead+ fallback applies (see <see cref="IsAuthorizedAsync"/>). See docs/planning-poker-approval-tiers-spec.md.
 ///
-/// Whoever submitted an estimate can never be the one who approves or rejects it: a Team Lead who submits on an engineer's
-/// behalf would otherwise be that engineer's approver too, and the whole point of an approval is a second pair of eyes.
-/// The submitter is dropped from every approver list, and a submitting Team Lead's own tier is skipped so the request goes
-/// straight to the department head instead of waiting on someone who cannot act on it.</summary>
+/// Whoever submitted an estimate can never be the one who approves or rejects it: a Team Lead who submits on an engineer's behalf would otherwise be
+/// that engineer's approver too, and the whole point of an approval is a second pair of eyes. The submitter is dropped from every tier.</summary>
 public static class EstimationApproval
 {
-    public static async Task<ApprovalState?> ResolveApproversAsync(
-        Guid? assigneeId, bool escalatedToHead, Guid? submittedBy,
-        IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
+    /// <summary>The highest tier a pending request has been opened up to so far.</summary>
+    public static ApprovalStage ReachedBy(Domain.Tasks.TaskEstimationSession session) =>
+        session.EscalatedToPmo ? ApprovalStage.Pmo : session.EscalatedToHead ? ApprovalStage.DepartmentHead : ApprovalStage.TeamLead;
+
+    public static async Task<ApprovalState> ResolveApproversAsync(
+        Guid projectId, Guid? assigneeId, ApprovalStage reached, Guid? submittedBy,
+        IProjectRepository projects, IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
     {
-        if (assigneeId is not Guid id) return null; // no assignee — caller's own TeamLeadOrAbove fallback applies
+        var stakeholders = await TaskStakeholders.ResolveAsync(projectId, assigneeId, projects, engineers, teams, ct);
 
-        var assignee = await engineers.GetByIdAsync(id, ct);
-        // A Team Lead's own task has no "their team lead" tier — there's no lead above a lead —
-        // so it goes straight to the department head.
-        var skipTeamLeadTier = assignee?.Role == Roles.TeamLead;
+        // A team lead's own task has no "their team lead" tier — it goes straight to the department head.
+        var assignee = assigneeId is Guid id ? await engineers.GetByIdAsync(id, ct) : null;
+        // A lead who submitted it cannot also be the first-line approver of their own submission, so their tier is skipped too.
+        var lead = assignee?.Role == Roles.TeamLead || stakeholders.TeamLead?.Id == assigneeId || stakeholders.TeamLead?.Id == submittedBy
+            ? null : stakeholders.TeamLead;
 
-        var teamLead = skipTeamLeadTier ? null : await DepartmentScope.GetOwnTeamLeadAsync(id, engineers, teams, ct);
-        // A team lead who submitted it cannot also be the first-line approver of their own submission.
-        if (teamLead is not null && teamLead.Id == submittedBy) teamLead = null;
+        var approvers = new List<Engineer>();
+        var stage = ApprovalStage.TeamLead;
+        if (lead is not null) approvers.Add(lead);
 
-        if (teamLead is not null && !escalatedToHead)
-            return new([teamLead], ApprovalStage.TeamLead);
+        var headsOpen = reached >= ApprovalStage.DepartmentHead || lead is null;
+        var heads = stakeholders.DepartmentHeads.Where(h => h.Id != submittedBy).ToList();
+        if (headsOpen && heads.Count > 0)
+        {
+            approvers.AddRange(heads);
+            stage = ApprovalStage.DepartmentHead;
+        }
 
-        var heads = await DepartmentScope.GetDepartmentHeadsAsync(id, engineers, teams, ct);
-        var approvers = teamLead is not null
-            // Escalated: both the Team Lead and the head(s) can act — a backstop, not a handoff.
-            ? heads.Cast<Engineer>().Append(teamLead).DistinctBy(e => e.Id).ToList()
-            // No Team Lead tier to begin with (skipped, or none resolvable).
-            : heads.Cast<Engineer>().ToList();
+        // Nobody below the PMO to ask: it goes there from the start rather than waiting on no one.
+        if (reached >= ApprovalStage.Pmo || approvers.Count == 0)
+        {
+            approvers.AddRange(stakeholders.Pmo);
+            stage = ApprovalStage.Pmo;
+        }
 
-        // Never the submitter, whichever tier they would otherwise have sat in (a head who submitted for someone, say).
-        return new(approvers.Where(a => a.Id != submittedBy).ToList(), ApprovalStage.DepartmentHead);
+        return new(approvers.DistinctBy(a => a.Id).Where(a => a.Id != submittedBy).ToList(), stage);
     }
 
     public static async Task<bool> IsAuthorizedAsync(
-        Guid? assigneeId, Guid actorId, string actorRole, bool escalatedToHead, Guid? submittedBy,
-        IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
+        Guid projectId, Guid? assigneeId, Guid actorId, string actorRole, ApprovalStage reached, Guid? submittedBy,
+        IProjectRepository projects, IEngineerRepository engineers, ITeamRepository teams, CancellationToken ct)
     {
         if (actorId == submittedBy) return false;
 
-        var state = await ResolveApproversAsync(assigneeId, escalatedToHead, submittedBy, engineers, teams, ct);
-        if (state is null || state.Approvers.Count == 0)
+        var state = await ResolveApproversAsync(projectId, assigneeId, reached, submittedBy, projects, engineers, teams, ct);
+        if (state.Approvers.Count == 0)
             return CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(actorRole);
 
         return state.Approvers.Any(a => a.Id == actorId);
