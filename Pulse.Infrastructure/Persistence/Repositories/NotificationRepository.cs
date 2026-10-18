@@ -38,6 +38,12 @@ public class NotificationRepository : INotificationRepository
     public async Task<IReadOnlyList<Notification>> ListByKindAsync(string kind, CancellationToken ct = default) =>
         await _db.Notifications.Where(n => n.Kind == kind).ToListAsync(ct);
 
+    public async Task<IReadOnlyDictionary<Guid, DateTime>> GetLastCreatedAtByUserAsync(string kind, CancellationToken ct = default) =>
+        await _db.Notifications.Where(n => n.Kind == kind)
+            .GroupBy(n => n.UserId)
+            .Select(g => new { UserId = g.Key, Last = g.Max(n => n.CreatedAt) })
+            .ToDictionaryAsync(x => x.UserId, x => x.Last, ct);
+
     public async Task AddAsync(Notification notification, CancellationToken ct = default) =>
         await _db.Notifications.AddAsync(notification, ct);
 

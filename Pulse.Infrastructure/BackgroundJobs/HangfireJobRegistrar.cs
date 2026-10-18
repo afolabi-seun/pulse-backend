@@ -61,6 +61,12 @@ public static class HangfireJobRegistrar
             r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 9 * * 1-5");
 
+        // 09:00 weekdays — one digest per department head / PMO member of the tasks that reached their due-date stage since the last one
+        manager.AddOrUpdate<OrganizationJobRunner<EscalationDigestJob>>(
+            "escalation-digest",
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
+            "0 9 * * 1-5");
+
         // 16:00 Friday — weekly reminder for eligible roles who haven't logged any hours this week
         manager.AddOrUpdate<OrganizationJobRunner<TimeEntryReminderJob>>(
             "time-entry-reminder",
