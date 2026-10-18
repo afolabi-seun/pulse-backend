@@ -54,7 +54,7 @@ public static class DepartmentScope
     /// The active engineer(s) holding a "Head of X" role whose own team's Department matches the
     /// given engineer's team's Department — i.e., that engineer's own department head(s). Empty
     /// when the engineer has no team, their team has no Department set, or no head's team matches
-    /// it (e.g. HeadOfPmo/HeadOfProduct are deliberately unscoped by role and carry no team of
+    /// it. A head named on the team itself (<see cref="Domain.Teams.Team.HeadId"/>) is used instead of the label match when one is set (e.g. HeadOfPmo/HeadOfProduct are deliberately unscoped by role and carry no team of
     /// their own — see DemoSeeder — so they never resolve here; callers need their own fallback
     /// for that case, same as DepartmentScope.EngineerIdsAsync's null-department "see all").
     /// </summary>
@@ -65,6 +65,12 @@ public static class DepartmentScope
         if (engineer?.TeamId is not Guid teamId) return [];
 
         var team = await teams.GetByIdAsync(teamId, ct);
+
+        // A head named on the team itself is the answer — the department label can't tell apart two heads whose departments carry the same label.
+        if (team?.HeadId is Guid namedHeadId
+            && await engineers.GetByIdAsync(namedHeadId, ct) is { IsActive: true } namedHead)
+            return [namedHead];
+
         if (team?.Department is not string department) return [];
 
         var deptTeamIds = (await teams.ListAllAsync(ct))
