@@ -1,3 +1,4 @@
+using Pulse.Application.CheckIns;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Common;
@@ -17,9 +18,11 @@ public class SetTaskProgressHandler : IRequestHandler<SetTaskProgressCommand, Se
     private readonly IProjectAccessPolicy _access;
     private readonly IRealtimeNotifier _realtime;
     private readonly IAuditLogRepository _audit;
+    private readonly ICheckInRepository _checkIns;
 
-    public SetTaskProgressHandler(ITaskRepository tasks, ISubtaskRepository subtasks, IProjectAccessPolicy access, IRealtimeNotifier realtime, IAuditLogRepository audit)
+    public SetTaskProgressHandler(ITaskRepository tasks, ISubtaskRepository subtasks, IProjectAccessPolicy access, IRealtimeNotifier realtime, IAuditLogRepository audit, ICheckInRepository checkIns)
     {
+        _checkIns = checkIns;
         _tasks = tasks;
         _subtasks = subtasks;
         _access = access;
@@ -40,6 +43,7 @@ public class SetTaskProgressHandler : IRequestHandler<SetTaskProgressCommand, Se
         if (checklist.Count > 0)
             return ServiceResult<TaskDto>.Fail("BUSINESS_RULE_VIOLATION", "This task has a checklist, so its progress follows the checklist. Tick items off there.");
 
+        var before = task.ProgressPercent;
         try
         {
             task.SetProgress(cmd.Percent, cmd.ActorId);
@@ -50,6 +54,10 @@ public class SetTaskProgressHandler : IRequestHandler<SetTaskProgressCommand, Se
         }
 
         await _tasks.SaveChangesAsync(ct);
+        // Moving one's own task forward counts as having checked in today; moving it back, or a lead setting someone else's, does not.
+        if (cmd.Percent > before && task.AssigneeId == cmd.ActorId)
+            await AutoCheckIn.EnsureForProgressAsync(_checkIns, cmd.ActorId, task.ProjectId, task.Title, cmd.Percent, ct);
+
         await _audit.LogAsync("TASK_PROGRESS_SET", cmd.ActorId, cmd.IpAddress, $"Task {task.Id} progress set to {cmd.Percent}%", ct);
 
         var dto = TaskDto.From(task);

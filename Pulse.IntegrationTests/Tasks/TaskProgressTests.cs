@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Pulse.Application.CheckIns;
 using Pulse.Application.Common;
 using Pulse.Application.Meta;
 using Pulse.Application.Overwork;
@@ -229,6 +230,66 @@ public class TaskProgressTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         var response = await client.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/progress", new { percent = 50 });
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    // ── automatic check-in ──────────────────────────────────────────────────
+
+    private async Task<List<CheckInDto>> TodaysCheckInsAsync(HttpClient client)
+    {
+        var body = await (await client.GetAsync("/api/v1/check-ins?limit=25")).Content
+            .ReadFromJsonAsync<ApiResponse<PagedResultDto<CheckInDto>>>(JsonOpts);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return body!.Data!.Items.Where(c => c.Date == today).ToList();
+    }
+
+    [Fact]
+    public async Task Moving_progress_forward_checks_the_engineer_in_with_one_line_per_task()
+    {
+        var engineer = await SeedEngineerAsync("progci_eng@pulse.io", Roles.Engineer);
+        var project = await SeedProjectAsync("Progress check-in");
+        var task = await SeedTaskAsync("Fix login", project.Id, points: 8, assigneeId: engineer.Id);
+        var client = await AuthenticatedClientAsync("progci_eng@pulse.io");
+
+        foreach (var step in new[] { 25, 50 })
+            (await client.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/progress", new { percent = step })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var checkIn = (await TodaysCheckInsAsync(client)).Should().ContainSingle(c => c.ProjectId == project.Id).Subject;
+        checkIn.Completed.Should().Be("Progress: Fix login — 50%");
+    }
+
+    [Fact]
+    public async Task Ticking_off_checklist_items_checks_the_engineer_in_and_updates_the_same_line()
+    {
+        var engineer = await SeedEngineerAsync("checkci_eng@pulse.io", Roles.Engineer);
+        var project = await SeedProjectAsync("Checklist check-in");
+        var task = await SeedTaskAsync("Ship search", project.Id, points: 5, assigneeId: engineer.Id);
+        var client = await AuthenticatedClientAsync("checkci_eng@pulse.io");
+
+        var ids = new List<Guid>();
+        foreach (var title in new[] { "Index", "Query", "UI" })
+        {
+            var added = await client.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/subtasks", new { title });
+            ids.Add((await added.Content.ReadFromJsonAsync<ApiResponse<Pulse.Application.Tasks.SubtaskDto>>(JsonOpts))!.Data!.Id);
+        }
+        foreach (var id in ids.Take(2))
+            (await client.PatchAsJsonAsync($"/api/v1/tasks/{task.Id}/subtasks/{id}", new { isDone = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var checkIn = (await TodaysCheckInsAsync(client)).Should().ContainSingle(c => c.ProjectId == project.Id).Subject;
+        checkIn.Completed.Should().Be("Checklist: Ship search — 2 of 3 items done");
+    }
+
+    [Fact]
+    public async Task A_lead_setting_someone_elses_progress_does_not_check_the_lead_in()
+    {
+        var engineer = await SeedEngineerAsync("progci2_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("progci2_pm@pulse.io", Roles.ProjectManager);
+        var project = await SeedProjectAsync("Lead progress check-in");
+        var task = await SeedTaskAsync("Someone else's", project.Id, points: 8, assigneeId: engineer.Id);
+        var pm = await AuthenticatedClientAsync("progci2_pm@pulse.io");
+
+        (await pm.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/progress", new { percent = 50 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await TodaysCheckInsAsync(pm)).Should().BeEmpty();
     }
 
     // ── reports ──────────────────────────────────────────────────────────────
