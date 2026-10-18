@@ -5,7 +5,9 @@ using MediatR;
 
 namespace Pulse.Application.Projects.Queries;
 
-public record ThroughputWeekDto(DateOnly WeekOf, int PointsDelivered);
+/// <param name="PointsDelivered">Points on tasks finished that week (a task counts only when it is Done).</param>
+/// <param name="PointsEarned">Points earned that week as work moved forward, including parts of tasks not yet finished; negative parts when work was taken back.</param>
+public record ThroughputWeekDto(DateOnly WeekOf, int PointsDelivered, decimal PointsEarned = 0m);
 
 public record GetProjectThroughputQuery(Guid ProjectId, Guid ActorId, string ActorRole) : IRequest<ServiceResult<IReadOnlyList<ThroughputWeekDto>>>;
 

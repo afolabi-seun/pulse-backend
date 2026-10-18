@@ -21,7 +21,8 @@ public record UpdateThresholdsCommand(
     IReadOnlyList<PointScaleEntryDto>? PointScale,
     IReadOnlyList<PriorityScaleEntryDto>? PriorityScale,
     Guid ActorId,
-    string? IpAddress) : IRequest<ServiceResult<ThresholdsDto>>;
+    string? IpAddress,
+    bool? UseProgressInWorkload = null) : IRequest<ServiceResult<ThresholdsDto>>;
 
 /// <summary>
 /// Persists threshold changes to DB and updates the in-memory singleton so existing background jobs
@@ -64,6 +65,12 @@ public class UpdateThresholdsHandler : IRequestHandler<UpdateThresholdsCommand, 
         {
             _thresholds.SignalsRequiredToFlag = cmd.SignalsRequiredToFlag.Value;
             await _repo.SetAsync("SignalsRequiredToFlag", cmd.SignalsRequiredToFlag.Value.ToString(), ct);
+        }
+
+        if (cmd.UseProgressInWorkload.HasValue)
+        {
+            _thresholds.UseProgressInWorkload = cmd.UseProgressInWorkload.Value;
+            await _repo.SetAsync("UseProgressInWorkload", cmd.UseProgressInWorkload.Value ? "true" : "false", ct);
         }
 
         if (cmd.EscalationT3Days.HasValue)
@@ -139,6 +146,7 @@ public class UpdateThresholdsHandler : IRequestHandler<UpdateThresholdsCommand, 
             _thresholds.EscalationT1MinHours,
             _thresholds.QaLeadTimeDays,
             _thresholds.PointScale.Select(e => new PointScaleEntryDto(e.Value, e.Label, e.TimeGuide)).ToList(),
-            _thresholds.PriorityScale.Select(e => new PriorityScaleEntryDto(e.Value, e.Label, e.Criteria)).ToList()));
+            _thresholds.PriorityScale.Select(e => new PriorityScaleEntryDto(e.Value, e.Label, e.Criteria)).ToList(),
+            _thresholds.UseProgressInWorkload));
     }
 }

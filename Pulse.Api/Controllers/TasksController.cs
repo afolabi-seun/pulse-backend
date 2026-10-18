@@ -84,6 +84,7 @@ public class TasksController : ControllerBase
     public record HandOffToFrontendRequest(Guid FrontendAssigneeId);
     public record HandOffToBackendRequest(Guid BackendAssigneeId);
     public record PauseTaskRequest(string? Note);
+    public record SetTaskProgressRequest(int Percent);
     public record PreviewAssignRequest(Guid TargetEngineerId);
     public record BulkReassignRequest(IReadOnlyList<Guid> TaskIds, Guid TargetEngineerId);
     public record BulkStatusChangeRequest(IReadOnlyList<Guid> TaskIds, string TargetStatus);
@@ -557,6 +558,18 @@ public class TasksController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> PauseTask(Guid id, [FromBody] PauseTaskRequest request) =>
         (await _mediator.Send(new PauseTaskCommand(id, request.Note, GetActorId(), GetIp(), GetRole()))).ToActionResult();
+
+    /// <summary>Says how far along a task is: 0, 25, 50 or 75 percent.</summary>
+    /// <remarks>The assigned engineer, or anyone with access to the task's project, may set it while the task is Active or Blocked. A task with a
+    /// checklist is as far along as its checklist, so this is refused for it. The points the task has earned follow from the percentage.</remarks>
+    [HttpPost("{id:guid}/progress")]
+    [ProducesResponseType(typeof(ApiResponse<TaskDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetTaskProgress(Guid id, [FromBody] SetTaskProgressRequest request) =>
+        (await _mediator.Send(new SetTaskProgressCommand(id, request.Percent, GetActorId(), GetRole(), GetIp()))).ToActionResult();
 
     /// <summary>Resumes a paused task, returning it to Active.</summary>
     [HttpDelete("{id:guid}/pause")]

@@ -1561,6 +1561,13 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("due_date");
 
+                    b.Property<decimal>("EarnedPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("earned_points");
+
                     b.Property<Guid?>("EpicId")
                         .HasColumnType("uuid")
                         .HasColumnName("epic_id");
@@ -1644,6 +1651,12 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                     b.Property<int?>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
+
+                    b.Property<int>("ProgressPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("progress_percent");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
@@ -2000,6 +2013,49 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_task_history_task_id");
 
                     b.ToTable("task_history", (string)null);
+                });
+
+            modelBuilder.Entity("Pulse.Domain.Tasks.TaskProgressCredit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("CreditedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credited_at");
+
+                    b.Property<Guid?>("EngineerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("engineer_id");
+
+                    b.Property<decimal>("Points")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("points");
+
+                    b.Property<int>("ProgressAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("progress_after");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("ix_task_progress_credits_task_id");
+
+                    b.HasIndex("EngineerId", "CreditedAt")
+                        .HasDatabaseName("ix_task_progress_credits_engineer_id_credited_at");
+
+                    b.ToTable("task_progress_credits", (string)null);
                 });
 
             modelBuilder.Entity("Pulse.Domain.Teams.Team", b =>

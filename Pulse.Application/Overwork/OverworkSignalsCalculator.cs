@@ -10,6 +10,9 @@ public class OverworkSignalsCalculator
 
     public OverworkSignalsCalculator(OverworkThresholds thresholds) => _thresholds = thresholds;
 
+    /// <summary>Whether workload counts only the points still to do — the organization-wide setting, which a department's thresholds cannot change.</summary>
+    public bool UseProgress => _thresholds.UseProgressInWorkload;
+
     public (OverworkSignals Signals, bool WouldFlagOverworked) Compute(
         Engineer engineer,
         IReadOnlyList<PulseTask> activeTasks,
@@ -28,7 +31,7 @@ public class OverworkSignalsCalculator
     /// <summary>Points on the engineer's active work that are due within their baseline cycle — plus anything overdue or
     /// undated. This is the number the load signal compares with the baseline, and what "due this cycle" means wherever
     /// it is shown. Zero when no baseline is configured (the signal doesn't apply).</summary>
-    public static int CyclePoints(Engineer engineer, IReadOnlyList<PulseTask> activeTasks)
+    public static int CyclePoints(Engineer engineer, IReadOnlyList<PulseTask> activeTasks, bool useProgress = false)
     {
         if (engineer.BaselinePoints <= 0 || engineer.BaselineCycleDays <= 0) return 0;
         // BaselinePoints is framed as a rate — "N points per cycle" — so the load signal only
@@ -38,7 +41,7 @@ public class OverworkSignalsCalculator
         // would silently under-report load, the wrong failure direction for an overwork
         // detector. Only a task with a due date clearly beyond this cycle is excluded.
         var cycleEnd = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(engineer.BaselineCycleDays);
-        return activeTasks.Where(t => t.DueDate is null || t.DueDate <= cycleEnd).Sum(t => t.Points);
+        return WorkloadPoints.Sum(activeTasks.Where(t => t.DueDate is null || t.DueDate <= cycleEnd), useProgress);
     }
 
     private static OverworkSignals BuildSignals(Engineer engineer, IReadOnlyList<PulseTask> activeTasks, OverworkThresholds thresholds)
@@ -55,7 +58,7 @@ public class OverworkSignalsCalculator
         var threshold = 0.0;
         if (hasBaseline)
         {
-            inCyclePoints = CyclePoints(engineer, activeTasks);
+            inCyclePoints = CyclePoints(engineer, activeTasks, thresholds.UseProgressInWorkload);
             threshold = engineer.BaselinePoints * thresholds.LoadVsBaselineRatio;
             loadSignal = new OverworkSignal(
                 inCyclePoints > threshold,
@@ -86,7 +89,7 @@ public class OverworkSignalsCalculator
             LoadVsBaseline = loadSignal,
             Concurrent = concurrentSignal,
             StaleInProgress = staleSignal,
-            ActivePoints = activeTasks.Sum(t => t.Points),
+            ActivePoints = WorkloadPoints.Sum(activeTasks, thresholds.UseProgressInWorkload),
             CyclePoints = inCyclePoints,
             CycleDays = engineer.BaselineCycleDays,
             LoadThresholdPoints = threshold,

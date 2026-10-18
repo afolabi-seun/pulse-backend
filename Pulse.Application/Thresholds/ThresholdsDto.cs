@@ -17,4 +17,5 @@ public record ThresholdsDto(
     double EscalationT1MinHours,
     int QaLeadTimeDays,
     IReadOnlyList<PointScaleEntryDto> PointScale,
-    IReadOnlyList<PriorityScaleEntryDto> PriorityScale);
+    IReadOnlyList<PriorityScaleEntryDto> PriorityScale,
+    bool UseProgressInWorkload = false);
