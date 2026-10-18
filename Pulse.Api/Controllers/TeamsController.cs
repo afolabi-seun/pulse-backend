@@ -24,8 +24,8 @@ public class TeamsController : ControllerBase
 
     public TeamsController(IMediator mediator) => _mediator = mediator;
 
-    public record CreateTeamRequest(string Name, Guid? TeamLeadId, string? Department);
-    public record UpdateTeamRequest(string? Name, Guid? TeamLeadId, bool? ClearTeamLead, bool? Deactivate, string? Department, bool? ClearDepartment);
+    public record CreateTeamRequest(string Name, Guid? TeamLeadId, string? Department, Guid? HeadId = null);
+    public record UpdateTeamRequest(string? Name, Guid? TeamLeadId, bool? ClearTeamLead, bool? Deactivate, string? Department, bool? ClearDepartment, Guid? HeadId = null, bool? ClearHead = null);
 
     /// <summary>Returns all teams.</summary>
     [HttpGet]
@@ -46,7 +46,7 @@ public class TeamsController : ControllerBase
     public async Task<IActionResult> CreateTeam([FromBody] CreateTeamRequest request)
     {
         var result = await _mediator.Send(new CreateTeamCommand(
-            request.Name, request.TeamLeadId, request.Department, GetActorId(), GetIp()));
+            request.Name, request.TeamLeadId, request.Department, GetActorId(), GetIp(), request.HeadId));
 
         return result.ToCreatedResult("GetTeam", new { id = result.Data?.Id });
     }
@@ -72,7 +72,7 @@ public class TeamsController : ControllerBase
         (await _mediator.Send(new UpdateTeamCommand(
             id, request.Name, request.TeamLeadId, request.ClearTeamLead,
             request.Deactivate, request.Department, request.ClearDepartment,
-            GetActorId(), GetIp()))).ToActionResult();
+            GetActorId(), GetIp(), request.HeadId, request.ClearHead))).ToActionResult();
 
     /// <summary>Returns delivered story points per week over the 6-week rolling window, summed across
     /// the team's engineers — the team-level analogue of the per-engineer/per-project throughput charts.</summary>

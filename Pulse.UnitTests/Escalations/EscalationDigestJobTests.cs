@@ -4,6 +4,8 @@ using Pulse.Application.Escalations;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Escalations;
 using Pulse.Domain.Notifications;
+using Pulse.Domain.Projects;
+using Pulse.Domain.Teams;
 using Pulse.Domain.Tasks;
 using FluentAssertions;
 using Moq;
@@ -21,6 +23,7 @@ public class EscalationDigestJobTests
     private readonly Mock<ITaskRepository> _tasks = new();
     private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IEngineerRepository> _engineers = new();
+    private readonly Mock<ITeamRepository> _teams = new();
     private readonly Mock<IProjectAccessPolicy> _access = new();
     private readonly Mock<INotificationRepository> _notifications = new();
     private readonly Mock<IRealtimeNotifier> _realtime = new();
@@ -68,7 +71,7 @@ public class EscalationDigestJobTests
     }
 
     private EscalationDigestJob Job() =>
-        new(_events.Object, _tasks.Object, _projects.Object, _engineers.Object, _access.Object, _notifications.Object,
+        new(_events.Object, _tasks.Object, _projects.Object, _engineers.Object, _teams.Object, _access.Object, _notifications.Object,
             TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _settings.Object, new FixedClock(Now));
 
     /// <summary>A live, assigned task with an escalation event of the given level fired <paramref name="firedHoursAgo"/> hours ago.</summary>
@@ -248,5 +251,43 @@ public class EscalationDigestJobTests
         mail.Body.Should().Contain("Mobile App (1)").And.Contain("Ada Assignee").And.Contain("due <strong>tomorrow</strong>")
             .And.Contain("Fix &lt;b&gt;login&lt;/b&gt; &amp; logout").And.NotContain("<b>login</b>")
             .And.Contain("https://cadence.test/escalations");
+    }
+
+    // ── A head named on the owning team ───────────────────────────────────────
+
+    [Fact]
+    public async Task When_the_owning_team_names_a_head_only_that_head_hears_about_its_tasks()
+    {
+        var felix = Engineer.Create("Felix Onen", "felix@test.io", "hash", Roles.HeadOfInfraDevOps, 20, 14);
+        _engineers.Setup(e => e.ListByRoleAsync(Roles.HeadOfInfraDevOps, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { felix });
+        var infra = Team.Create("Infra");
+        infra.SetHead(felix.Id);
+        var project = Project.Create("Infra work", ownerTeamId: infra.Id);
+        _projects.Setup(p => p.GetByIdAsync(project.Id, It.IsAny<CancellationToken>())).ReturnsAsync(project);
+        _teams.Setup(t => t.GetByIdAsync(infra.Id, It.IsAny<CancellationToken>())).ReturnsAsync(infra);
+        Add("Infra task", TwoDaysAgo, EscalationLevel.Overdue, projectId: project.Id);
+
+        await Job().RunAsync();
+
+        MailTo(felix).Should().ContainSingle("Felix is the head the team names");
+        MailTo(_head).Should().BeEmpty("Hari heads another department and only shares its label; he must not hear about this team's tasks");
+        MailTo(_pmo).Should().ContainSingle("the PMO is unaffected");
+    }
+
+    [Fact]
+    public async Task A_team_with_no_named_head_still_reaches_every_head_who_can_open_the_project()
+    {
+        var felix = Engineer.Create("Felix Onen", "felix@test.io", "hash", Roles.HeadOfInfraDevOps, 20, 14);
+        _engineers.Setup(e => e.ListByRoleAsync(Roles.HeadOfInfraDevOps, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { felix });
+        var team = Team.Create("Unassigned head");
+        var project = Project.Create("Plain work", ownerTeamId: team.Id);
+        _projects.Setup(p => p.GetByIdAsync(project.Id, It.IsAny<CancellationToken>())).ReturnsAsync(project);
+        _teams.Setup(t => t.GetByIdAsync(team.Id, It.IsAny<CancellationToken>())).ReturnsAsync(team);
+        Add("Plain task", TwoDaysAgo, EscalationLevel.Overdue, projectId: project.Id);
+
+        await Job().RunAsync();
+
+        MailTo(felix).Should().ContainSingle();
+        MailTo(_head).Should().ContainSingle();
     }
 }

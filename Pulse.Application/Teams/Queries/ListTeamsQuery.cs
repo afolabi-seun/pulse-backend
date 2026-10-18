@@ -27,7 +27,8 @@ public class ListTeamsHandler : IRequestHandler<ListTeamsQuery, ServiceResult<IR
     public async Task<ServiceResult<IReadOnlyList<TeamDto>>> Handle(ListTeamsQuery query, CancellationToken ct)
     {
         var teams = await _teams.ListAllAsync(ct);
-        var leadIds = teams.Where(t => t.TeamLeadId.HasValue).Select(t => t.TeamLeadId!.Value).Distinct().ToList();
+        var leadIds = teams.Where(t => t.TeamLeadId.HasValue).Select(t => t.TeamLeadId!.Value)
+            .Concat(teams.Where(t => t.HeadId.HasValue).Select(t => t.HeadId!.Value)).Distinct().ToList();
         var leads = leadIds.Count > 0
             ? (await _engineers.GetByIdsAsync(leadIds, ct)).ToDictionary(e => e.Id, e => e.Name)
             : new Dictionary<Guid, string>();
@@ -47,11 +48,12 @@ public class ListTeamsHandler : IRequestHandler<ListTeamsQuery, ServiceResult<IR
         {
             var visible = !restrictToOwnDepartment || t.Department == callerDepartment;
             var leadName = t.TeamLeadId.HasValue && leads.TryGetValue(t.TeamLeadId.Value, out var n) ? n : null;
+            var headName = t.HeadId.HasValue && leads.TryGetValue(t.HeadId.Value, out var h) ? h : null;
             var memberCount = counts.TryGetValue(t.Id, out var c) ? c : 0;
 
             return visible
-                ? TeamDto.From(t, leadName, memberCount)
-                : TeamDto.From(t, leadName: null, memberCount: null);
+                ? TeamDto.From(t, leadName, memberCount, headName)
+                : TeamDto.From(t, leadName: null, memberCount: null, headName: null);
         }).ToList();
 
         return ServiceResult<IReadOnlyList<TeamDto>>.Ok(dtos);

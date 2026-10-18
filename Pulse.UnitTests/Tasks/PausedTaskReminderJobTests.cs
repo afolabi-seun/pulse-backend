@@ -225,4 +225,19 @@ public class PausedTaskReminderJobTests
         _created.Should().BeEmpty();
         _tasks.Verify(t => t.SaveChangesAsync(default), Times.Never);
     }
+
+    [Fact]
+    public async Task When_the_owning_team_names_a_head_other_heads_who_share_its_department_label_are_not_told()
+    {
+        // _head (R&D) sits in the same department as the team, but the team names Felix as its head.
+        var felix = Engineer.Create("Felix Onen", "felix@test.io", "hash", Roles.HeadOfInfraDevOps, 20, 14);
+        _engineers.Setup(e => e.GetByIdAsync(felix.Id, default)).ReturnsAsync(felix);
+        _team.SetHead(felix.Id);
+        Candidates(PausedTask("Fix login", FiveWorkingDaysAgo));
+
+        await Job().RunAsync();
+
+        _created.Select(n => n.UserId).Should().BeEquivalentTo([_lead.Id, felix.Id, _pm.Id]);
+        _created.Should().NotContain(n => n.UserId == _head.Id);
+    }
 }

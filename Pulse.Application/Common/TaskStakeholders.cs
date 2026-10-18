@@ -33,7 +33,10 @@ public record TaskStakeholders(Engineer? TeamLead, IReadOnlyList<Engineer> Depar
         }
 
         var heads = new List<Engineer>();
-        if (team?.Department is string department)
+        // A head named on the team itself is the answer; the department label can't separate two heads whose departments carry the same label.
+        if (team?.HeadId is Guid namedHeadId && await engineers.GetByIdAsync(namedHeadId, ct) is { IsActive: true } namedHead)
+            heads.Add(namedHead);
+        else if (team?.Department is string department)
         {
             var departmentTeamIds = (await teams.ListAllAsync(ct)).Where(t => t.Department == department).Select(t => t.Id).ToHashSet();
             heads = (await engineers.ListActiveAsync(ct))
