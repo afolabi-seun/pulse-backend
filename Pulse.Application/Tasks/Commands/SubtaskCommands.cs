@@ -1,4 +1,5 @@
 using Pulse.Application.Auth;
+using Pulse.Application.CheckIns;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Tasks;
@@ -48,9 +49,11 @@ public class ToggleSubtaskHandler : IRequestHandler<ToggleSubtaskCommand, Servic
     private readonly ITaskRepository _tasks;
     private readonly ISubtaskRepository _subtasks;
     private readonly IAuditLogRepository _audit;
+    private readonly ICheckInRepository _checkIns;
 
-    public ToggleSubtaskHandler(ITaskRepository tasks, ISubtaskRepository subtasks, IAuditLogRepository audit)
+    public ToggleSubtaskHandler(ITaskRepository tasks, ISubtaskRepository subtasks, IAuditLogRepository audit, ICheckInRepository checkIns)
     {
+        _checkIns = checkIns;
         _tasks = tasks;
         _subtasks = subtasks;
         _audit = audit;
@@ -82,8 +85,17 @@ public class ToggleSubtaskHandler : IRequestHandler<ToggleSubtaskCommand, Servic
         await _subtasks.SaveChangesAsync(ct);
 
         if (justCompleted)
+        {
             await _audit.LogAsync("SUBTASK_COMPLETED", cmd.ActorId, cmd.IpAddress,
                 $"Subtask '{subtask.Id}' on task '{task.Id}' marked done", ct);
+
+            // Ticking off an item on one's own work counts as having checked in today (a lead ticking someone else's does not).
+            if (task.AssigneeId == cmd.ActorId || subtask.AssigneeId == cmd.ActorId)
+            {
+                var items = await _subtasks.GetByTaskIdAsync(task.Id, ct);
+                await AutoCheckIn.EnsureForChecklistAsync(_checkIns, cmd.ActorId, task.ProjectId, task.Title, items.Count(i => i.IsDone), items.Count, ct);
+            }
+        }
 
         return ServiceResult<SubtaskDto>.Ok(SubtaskDto.From(subtask));
     }
