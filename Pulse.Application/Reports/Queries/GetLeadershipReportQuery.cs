@@ -92,6 +92,7 @@ public class GetLeadershipReportHandler : IRequestHandler<GetLeadershipReportQue
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Tasks.PulseTask>)g.ToList());
 
         // allActiveTasks already includes InQa — see GetPmoReportQuery's identical comment.
+        var notCountedByAssignee = UtilizationEntryBuilder.NotCountedByAssignee(allActiveTasks);
         var inQaTasksByAssignee = allActiveTasks
             .Where(t => t.AssigneeId.HasValue && t.Status == Domain.Tasks.TaskStatus.InQa)
             .GroupBy(t => t.AssigneeId!.Value)
@@ -113,7 +114,7 @@ public class GetLeadershipReportHandler : IRequestHandler<GetLeadershipReportQue
             UtilizationEntryBuilder.Build(
                 engineer, tasksByAssignee, inQaTasksByAssignee,
                 checkInCounts, blockersByAssignee, hoursThisWeek, completedTasksByEngineer,
-                subtasksCompletedByEngineer, workloadByEngineer)).ToList();
+                subtasksCompletedByEngineer, workloadByEngineer, notCountedByAssignee)).ToList();
 
         var now = DateTime.UtcNow;
         var engineerNameById = allEngineers.ToDictionary(e => e.Id, e => e.Name);
