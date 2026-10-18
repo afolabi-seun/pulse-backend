@@ -1,3 +1,4 @@
+using Pulse.Application.Overwork;
 using System.Text;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.TimeEntries;
@@ -8,8 +9,13 @@ namespace Pulse.Infrastructure.Persistence.Repositories;
 public class TimeEntryRepository : ITimeEntryRepository
 {
     private readonly PulseDbContext _db;
+    private readonly OverworkThresholds _thresholds;
 
-    public TimeEntryRepository(PulseDbContext db) => _db = db;
+    public TimeEntryRepository(PulseDbContext db, OverworkThresholds thresholds)
+    {
+        _db = db;
+        _thresholds = thresholds;
+    }
 
     public async Task<TimeEntry?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.TimeEntries.FirstOrDefaultAsync(t => t.Id == id, ct);
@@ -17,7 +23,9 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyList<TimeEntry>> GetByEngineerAsync(
         Guid engineerId, int limit, string? cursor, CancellationToken ct = default)
     {
-        var query = _db.TimeEntries.Where(t => t.EngineerId == engineerId);
+        // Nothing from before the reporting baseline.
+        var floor = _thresholds.FloorDate(DateOnly.MinValue);
+        var query = _db.TimeEntries.Where(t => t.EngineerId == engineerId && t.Date >= floor);
 
         if (cursor is not null)
         {
@@ -35,7 +43,7 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyList<TimeEntry>> GetByEngineerAndDateRangeAsync(
         Guid engineerId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
         await _db.TimeEntries
-            .Where(t => t.EngineerId == engineerId && t.Date >= from && t.Date <= to)
+            .Where(t => t.EngineerId == engineerId && t.Date >= _thresholds.FloorDate(from) && t.Date <= to)
             .OrderByDescending(t => t.Date)
             .ThenByDescending(t => t.Id)
             .ToListAsync(ct);
@@ -43,7 +51,7 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetHoursByEngineerInRangeAsync(
         DateOnly from, DateOnly to, IReadOnlyList<Guid>? engineerIds, CancellationToken ct = default)
     {
-        var query = _db.TimeEntries.Where(t => t.Date >= from && t.Date <= to);
+        var query = _db.TimeEntries.Where(t => t.Date >= _thresholds.FloorDate(from) && t.Date <= to);
         if (engineerIds is { Count: > 0 })
             query = query.Where(t => engineerIds.Contains(t.EngineerId));
 
@@ -58,7 +66,7 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetDeliveryHoursByEngineerInRangeAsync(
         DateOnly from, DateOnly to, IReadOnlyList<Guid>? engineerIds, CancellationToken ct = default)
     {
-        var query = _db.TimeEntries.Where(t => t.Date >= from && t.Date <= to && t.Category == TimeEntryCategory.Task);
+        var query = _db.TimeEntries.Where(t => t.Date >= _thresholds.FloorDate(from) && t.Date <= to && t.Category == TimeEntryCategory.Task);
         if (engineerIds is { Count: > 0 })
             query = query.Where(t => engineerIds.Contains(t.EngineerId));
 
@@ -73,7 +81,7 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyDictionary<(Guid EngineerId, DateOnly Date), decimal>> GetDailyHoursByEngineerInRangeAsync(
         DateOnly from, DateOnly to, IReadOnlyList<Guid>? engineerIds, CancellationToken ct = default)
     {
-        var query = _db.TimeEntries.Where(t => t.Date >= from && t.Date <= to);
+        var query = _db.TimeEntries.Where(t => t.Date >= _thresholds.FloorDate(from) && t.Date <= to);
         if (engineerIds is { Count: > 0 })
             query = query.Where(t => engineerIds.Contains(t.EngineerId));
 
@@ -88,7 +96,7 @@ public class TimeEntryRepository : ITimeEntryRepository
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetHoursByProjectInRangeAsync(
         DateOnly from, DateOnly to, IReadOnlyList<Guid>? engineerIds, CancellationToken ct = default)
     {
-        var query = _db.TimeEntries.Where(t => t.Date >= from && t.Date <= to);
+        var query = _db.TimeEntries.Where(t => t.Date >= _thresholds.FloorDate(from) && t.Date <= to);
         if (engineerIds is { Count: > 0 })
             query = query.Where(t => engineerIds.Contains(t.EngineerId));
 
@@ -118,7 +126,7 @@ public class TimeEntryRepository : ITimeEntryRepository
         // Same effective-project rule as GetHoursByProjectInRangeAsync (Guid.Empty = no project). Archived tasks still resolve (see above).
         using var archivedVisible = _db.IncludeArchivedTasks();
         var rows = _db.TimeEntries
-            .Where(t => t.Date >= from && t.Date <= to && engineerIds.Contains(t.EngineerId))
+            .Where(t => t.Date >= _thresholds.FloorDate(from) && t.Date <= to && engineerIds.Contains(t.EngineerId))
             .GroupJoin(_db.Tasks, t => t.TaskId, task => (Guid?)task.Id, (t, tasks) => new { t, tasks })
             .SelectMany(x => x.tasks.DefaultIfEmpty(), (x, task) => new
             {

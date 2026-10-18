@@ -1,3 +1,4 @@
+using Pulse.Application.Overwork;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Domain.Escalations;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,13 @@ namespace Pulse.Infrastructure.Persistence.Repositories;
 public class EscalationEventRepository : IEscalationEventRepository
 {
     private readonly PulseDbContext _db;
+    private readonly OverworkThresholds _thresholds;
 
-    public EscalationEventRepository(PulseDbContext db) => _db = db;
+    public EscalationEventRepository(PulseDbContext db, OverworkThresholds thresholds)
+    {
+        _db = db;
+        _thresholds = thresholds;
+    }
 
     public async Task<bool> AlreadyFiredAsync(Guid taskId, EscalationLevel level, CancellationToken ct = default) =>
         await _db.EscalationEvents.AnyAsync(e => e.TaskId == taskId && e.Level == level, ct);
@@ -43,7 +49,7 @@ public class EscalationEventRepository : IEscalationEventRepository
         if (taskIds.Count == 0) return 0;
 
         return await _db.EscalationEvents
-            .Where(e => taskIds.Contains(e.TaskId) && e.FiredAt >= from && e.FiredAt <= to)
+            .Where(e => taskIds.Contains(e.TaskId) && e.FiredAt >= _thresholds.FloorTime(from) && e.FiredAt <= to)
             .Select(e => e.TaskId)
             .Distinct()
             .CountAsync(ct);
@@ -54,7 +60,7 @@ public class EscalationEventRepository : IEscalationEventRepository
         var sixWeeksAgo = DateTime.UtcNow.AddDays(-42);
 
         var firings = await _db.EscalationEvents
-            .Where(e => e.FiredAt >= sixWeeksAgo)
+            .Where(e => e.FiredAt >= _thresholds.FloorTime(sixWeeksAgo))
             .Select(e => e.FiredAt)
             .ToListAsync(ct);
 

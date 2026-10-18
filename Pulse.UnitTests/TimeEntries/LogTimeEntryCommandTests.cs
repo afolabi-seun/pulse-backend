@@ -89,7 +89,7 @@ public class LogTimeEntryCommandTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be("BUSINESS_RULE_VIOLATION");
-        result.ErrorMessage.Should().Contain("hasn't started");
+        result.ErrorMessage.Should().Contain("still in the Backlog");
         _timeEntries.Verify(r => r.AddAsync(It.IsAny<TimeEntry>(), default), Times.Never);
     }
 

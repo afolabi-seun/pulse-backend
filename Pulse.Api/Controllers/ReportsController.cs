@@ -38,6 +38,25 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetMyReport() =>
         (await _mediator.Send(new GetEngineerSignalsQuery(GetActorId()))).ToActionResult();
 
+    public record SetReportingBaselineRequest(DateOnly? Date);
+
+    /// <summary>The day reports and charts start from (null when there is none), so a page can say what it is not showing.</summary>
+    [HttpGet("baseline")]
+    [ProducesResponseType(typeof(ApiResponse<ReportingBaselineDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetReportingBaseline() =>
+        (await _mediator.Send(new GetReportingBaselineQuery())).ToActionResult();
+
+    /// <summary>Sets or clears the reporting baseline. Nothing is deleted or archived: reports just stop looking further back than this day.</summary>
+    [HttpPut("baseline")]
+    [RequiresCapability(CapabilityRegistry.PmoOnly)]
+    [ProducesResponseType(typeof(ApiResponse<ReportingBaselineDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetReportingBaseline([FromBody] SetReportingBaselineRequest request) =>
+        (await _mediator.Send(new SetReportingBaselineCommand(request.Date, GetActorId(), HttpContext.Connection.RemoteIpAddress?.ToString()))).ToActionResult();
+
     /// <summary>Returns the weekly leadership report — engineer workloads, escalations, and blockers.</summary>
     /// <remarks>Accessible to any department head (their own department), plus Executive and HR
     /// (org-wide, matching their other reporting queries). Pass ?weekOf=yyyy-MM-dd to retrieve a

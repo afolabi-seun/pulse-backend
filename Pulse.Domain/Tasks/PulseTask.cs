@@ -231,12 +231,10 @@ public class PulseTask : Entity
         Status = TaskStatus.Active;
     }
 
-    /// <summary>Called when a timer starts on this task. Points no longer gate this — a timer can
-    /// run against an ungroomed Backlog task like any other action; it just won't auto-promote out
-    /// of Backlog until it's actually pointed (see <see cref="PromoteFromBacklogIfGroomed"/>) — this
-    /// is the mechanism the "Unclaimed" timer tab uses to claim a backlog item, so Backlog itself
-    /// stays allowed here even though <see cref="EnsureCanLogTimeEntry"/> rejects it for a manual
-    /// entry. Paused/Blocked ARE rejected, unlike before: a task deliberately suspended or stuck
+    /// <summary>Called when a timer starts on this task. A pointed Backlog task is fine — this is how the
+    /// "Unclaimed" timer tab claims a backlog item, and it activates once it has an assignee (see
+    /// <see cref="PromoteFromBacklogIfGroomed"/>). An unpointed one is refused, the same as a manual entry
+    /// is: time is only logged against estimated work. Paused/Blocked ARE rejected, unlike before: a task deliberately suspended or stuck
     /// shouldn't start accruing new time just because someone opens a timer on it. Active is left
     /// alone, as always.</summary>
     public void ActivateForTimer(Guid actorId)
@@ -247,6 +245,10 @@ public class PulseTask : Entity
             throw new DomainException("Cannot start a timer on a paused task.");
         if (Status == TaskStatus.Blocked)
             throw new DomainException("Cannot start a timer on a blocked task.");
+        // Hours belong on sized work: a Backlog task with no points has no estimate to measure them against, and Backlog work is left out of workload and
+        // escalations, so the time would sit unseen. Give it points (or ask the team lead to) and it can be claimed and timed.
+        if (Status == TaskStatus.Backlog && Points < 1)
+            throw new DomainException("This task has no estimate yet, so time can't be logged against it. Give it points, or ask your team lead to, then start the timer.");
 
         PromoteFromBacklogIfGroomed(actorId);
     }
@@ -263,7 +265,7 @@ public class PulseTask : Entity
         if (Status == TaskStatus.Blocked)
             throw new DomainException("Cannot log time on a blocked task.");
         if (Status == TaskStatus.Backlog)
-            throw new DomainException("Cannot log time on a task that hasn't started yet.");
+            throw new DomainException("This task is still in the Backlog (not estimated or not started yet), so time can't be logged against it.");
     }
 
     public void MarkDone(Guid actorId)
