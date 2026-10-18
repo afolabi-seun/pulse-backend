@@ -34,7 +34,9 @@ public class ThresholdsController : ControllerBase
         int? QaLeadTimeDays,
         IReadOnlyList<PointScaleEntryDto>? PointScale,
         IReadOnlyList<PriorityScaleEntryDto>? PriorityScale,
-        bool? UseProgressInWorkload = null);
+        bool? UseProgressInWorkload = null,
+        bool? UseEarnedPointsInVelocity = null,
+        bool? EngineersCanCreateTasks = null);
 
     /// <summary>Returns the current overwork and escalation threshold values.</summary>
     [HttpGet]
@@ -71,7 +73,7 @@ public class ThresholdsController : ControllerBase
             request.QaLeadTimeDays,
             request.PointScale,
             request.PriorityScale,
-            GetActorId(), GetIp(), request.UseProgressInWorkload))).ToActionResult();
+            GetActorId(), GetIp(), request.UseProgressInWorkload, request.UseEarnedPointsInVelocity, request.EngineersCanCreateTasks))).ToActionResult();
 
     /// <summary>Returns every department's overwork threshold override. A field left null on a row
     /// means that field inherits the global default.</summary>

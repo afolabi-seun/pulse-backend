@@ -27,7 +27,11 @@ public record AppMetaDto(
     IReadOnlyList<EnumMetaDto> TaskTypes,
     IReadOnlyList<EnumMetaDto> SprintStatuses,
     IReadOnlyList<PointScaleEntryDto> PointScale,
-    IReadOnlyList<PriorityScaleEntryDto> PriorityScale);
+    IReadOnlyList<PriorityScaleEntryDto> PriorityScale,
+    /// <summary>True when velocity and performance count points earned in a period rather than points on tasks finished in it, so screens can say so.</summary>
+    bool MeasuresInEarnedPoints = false,
+    /// <summary>True when engineers and designers may also create tasks (the PMO's setting), so the screens can offer it to them.</summary>
+    bool EngineersCanCreateTasks = false);
 
 public record GetMetaQuery : IRequest<ServiceResult<AppMetaDto>>;
 
@@ -91,7 +95,7 @@ public class GetMetaHandler : IRequestHandler<GetMetaQuery, ServiceResult<AppMet
             .Select(e => new PriorityScaleEntryDto(e.Value, e.Label, e.Criteria))
             .ToList();
         return Task.FromResult(ServiceResult<AppMetaDto>.Ok(
-            new AppMetaDto(RoleMeta, TaskStatusMeta, TaskTypeMeta, SprintStatusMeta, pointScale, priorityScale)));
+            new AppMetaDto(RoleMeta, TaskStatusMeta, TaskTypeMeta, SprintStatusMeta, pointScale, priorityScale, _thresholds.UseEarnedPointsInVelocity, _thresholds.EngineersCanCreateTasks)));
     }
 
     private static string Camel(string s) => s.Length == 0 ? s : char.ToLower(s[0]) + s[1..];

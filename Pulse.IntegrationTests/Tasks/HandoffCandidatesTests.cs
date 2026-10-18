@@ -107,14 +107,12 @@ public class HandoffCandidatesTests : IntegrationTestBase, IClassFixture<PulseWe
         await SeedProjectMemberAsync(project.Id, be.Id);
         // The task has to be a two-stage one for the hand-off to be valid.
         var beClient = await AuthenticatedClientAsync("hc_ho_be@pulse.io");
-        var created = await beClient.PostAsJsonAsync("/api/v1/tasks", new
+        var twoStage = await CreateTaskViaApiAsync(new
         {
             title = "Two-stage", points = 3,
             dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)).ToString("yyyy-MM-dd"),
             projectId = project.Id, assigneeId = be.Id, requiresFrontendHandoff = true,
         });
-        created.StatusCode.Should().Be(HttpStatusCode.Created);
-        var twoStage = (await created.Content.ReadFromJsonAsync<ApiResponse<Pulse.Application.Tasks.TaskDto>>(JsonOpts))!.Data!;
 
         var candidates = await GetCandidatesAsync(beClient, twoStage.Id, "frontend");
         candidates.Single(c => c.Id == fe.Id).OnProject.Should().BeFalse();

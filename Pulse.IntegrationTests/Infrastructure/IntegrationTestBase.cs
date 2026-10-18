@@ -103,6 +103,19 @@ public abstract class IntegrationTestBase
         return notification;
     }
 
+    /// <summary>Creates a task through the API the way someone who is allowed to would — a project manager (the PMO, team leads and department heads
+    /// create tasks; engineers do not). Returns the task as the API describes it.</summary>
+    protected async Task<Pulse.Application.Tasks.TaskDto> CreateTaskViaApiAsync(object body)
+    {
+        var email = $"task_creator_{Guid.NewGuid():N}@pulse.io";
+        await SeedEngineerAsync(email, Roles.ProjectManager);
+        var client = await AuthenticatedClientAsync(email);
+        var response = await client.PostAsJsonAsync("/api/v1/tasks", body);
+        if (response.StatusCode != System.Net.HttpStatusCode.Created)
+            throw new InvalidOperationException($"Creating the task failed: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        return (await response.Content.ReadFromJsonAsync<ApiResponse<Pulse.Application.Tasks.TaskDto>>(JsonOpts))!.Data!;
+    }
+
     protected async Task<PulseTask> SeedTaskAsync(
         string title,
         Guid projectId,
@@ -110,12 +123,13 @@ public abstract class IntegrationTestBase
         int dueDaysFromNow = 10,
         Guid? assigneeId = null,
         bool requiresQa = false,
-        bool requiresPrApproval = false)
+        bool requiresPrApproval = false,
+        Guid? createdById = null)
     {
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
         var task = PulseTask.Create(title, points, projectId,
-            dueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(dueDaysFromNow)));
+            dueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(dueDaysFromNow)), createdById: createdById);
         // This helper bypasses the real create command (and its TaskNumberAllocator), so it has to
         // assign one itself — a project's tasks otherwise collide on the (project_id, task_number)
         // unique index the moment a second task is seeded into the same project.

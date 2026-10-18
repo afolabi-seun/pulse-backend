@@ -5,6 +5,7 @@ using Pulse.Application.Common.Interfaces;
 using Pulse.Application.Notifications;
 using Pulse.Application.Projects;
 using Pulse.Application.Tasks;
+using Pulse.Domain.Engineers;
 using Pulse.Domain.Notifications;
 using Pulse.Domain.Projects;
 using Pulse.Domain.Tasks;
@@ -42,6 +43,7 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
     private readonly IProjectAccessPolicy _access;
     private readonly IAppSettings _settings;
     private readonly INotificationDispatcher _notify;
+    private readonly Pulse.Application.Overwork.OverworkThresholds _thresholds;
 
     public CreateTaskHandler(
         ITaskRepository tasks,
@@ -50,8 +52,10 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
         IAuditLogRepository audit,
         IProjectAccessPolicy access,
         IAppSettings settings,
-        INotificationDispatcher notify)
+        INotificationDispatcher notify,
+        Pulse.Application.Overwork.OverworkThresholds thresholds)
     {
+        _thresholds = thresholds;
         _notify = notify;
         _tasks = tasks;
         _projects = projects;
@@ -107,14 +111,19 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
             };
         }
 
-        // Below Team Lead, an actor may only ever create a task assigned to themselves — the
-        // create-page UI already locks the assignee picker to "Assign to me" for this role tier,
-        // but that's a UI convenience, not a guarantee; a submitted assignee that isn't the actor
-        // is silently corrected here rather than rejected, mirroring how Points is clamped below.
-        var assigneeId = cmd.AssigneeId;
-        if (assigneeId.HasValue && assigneeId.Value != cmd.ActorId
-            && !CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(cmd.ActorRole))
-            assigneeId = cmd.ActorId;
+        // Who plans the work: the PMO, team leads, department heads and the product roles. Engineers and designers create tasks only if the PMO has
+        // allowed it, and then only for themselves (below); the read-only roles never do. Which projects someone may create in is still decided by the
+        // project access rules in TaskCreationPolicy: a lead on their own team's projects, a head on their department's, the PMO and product roles
+        // everywhere. A personal to-do (HR, Accountant) is handled above and is not affected.
+        var plansWork = CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(cmd.ActorRole);
+        var mayFileOwn = _thresholds.EngineersCanCreateTasks && cmd.ActorRole is Roles.Engineer or Roles.Designer;
+        if (!isPersonal && !plansWork && !mayFileOwn)
+            return ServiceResult<TaskDto>.Fail("FORBIDDEN",
+                "Only the PMO, team leads and department heads can create tasks. Ask your team lead to add it, or add a checklist item to your own task.");
+
+        // An engineer or designer who is allowed to create files the task for themselves, unestimated; their lead points it. A submitted assignee or
+        // estimate is corrected rather than rejected, as the create page already locks both for them.
+        var assigneeId = plansWork || isPersonal ? cmd.AssigneeId : cmd.ActorId;
 
         if (assigneeId.HasValue)
         {
@@ -126,12 +135,8 @@ public class CreateTaskHandler : IRequestHandler<CreateTaskCommand, ServiceResul
         // Points is optional — a task can be created ungroomed (0 points, the same sentinel
         // PromoteFromBacklogIfGroomed/SendToQa/MarkDone/AssignToSprint already treat as "not yet
         // estimated") and pointed later via Planning Poker or a quick edit, rather than forcing
-        // whoever files it to guess a number up front. Below Team Lead, a submitted estimate is
-        // dropped rather than rejected — Engineer/Designer can still file the task, just without
-        // an estimate; a lead points it once they pick it up, same as the "estimate later" path.
-        var points = cmd.Points ?? 0;
-        if (points != 0 && !CapabilityRegistry.All[CapabilityRegistry.TeamLeadOrAbove].AllowedRoles.Contains(cmd.ActorRole))
-            points = 0;
+        // whoever files it to guess a number up front.
+        var points = plansWork || isPersonal ? cmd.Points ?? 0 : 0;
 
         var taskNumber = await _tasks.GetNextTaskNumberAsync(cmd.ProjectId, ct);
 

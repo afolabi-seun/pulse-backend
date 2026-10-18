@@ -334,7 +334,7 @@ public class QaWorkflowTests : IntegrationTestBase, IClassFixture<PulseWebApplic
         await SeedProjectMemberAsync(project.Id, backendDev.Id);
         var backendClient = await AuthenticatedClientAsync("qa_autoroute_backend@pulse.io");
 
-        var created = await backendClient.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Two-stage feature",
             points = 5,
@@ -344,8 +344,6 @@ public class QaWorkflowTests : IntegrationTestBase, IClassFixture<PulseWebApplic
             requiresFrontendHandoff = true,
             requiresQa = true,
         });
-        created.StatusCode.Should().Be(HttpStatusCode.Created);
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
 
         (await backendClient.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/hand-off-to-frontend",
             new { frontendAssigneeId = frontendDev.Id })).StatusCode.Should().Be(HttpStatusCode.OK);

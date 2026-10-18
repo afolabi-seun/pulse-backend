@@ -42,11 +42,11 @@ public class ProjectAccessGapTests : IntegrationTestBase, IClassFixture<PulseWeb
     }
 
     [Fact]
-    public async Task CreateTask_succeeds_for_an_engineer_connected_only_via_an_assigned_task()
+    public async Task CreateTask_succeeds_for_a_team_lead_connected_only_via_an_assigned_task()
     {
         var ownerTeam = await SeedTeamAsync("Access Gap Owner Team 2");
         var otherTeam = await SeedTeamAsync("Access Gap Engineer Team 2");
-        var engineer = await SeedEngineerAsync("gap_create_task@pulse.io");
+        var engineer = await SeedEngineerAsync("gap_create_task@pulse.io", Roles.TeamLead);
         await AssignEngineerToTeamAsync(engineer.Id, otherTeam.Id);
         var client = await AuthenticatedClientAsync("gap_create_task@pulse.io");
         var project = await SeedProjectAsync("Access Gap CreateTask", ownerTeamId: ownerTeam.Id);

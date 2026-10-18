@@ -247,13 +247,12 @@ public class CheckInTests : IntegrationTestBase, IClassFixture<PulseWebApplicati
         await SeedProjectMemberAsync(project.Id, backend.Id);
         var client = await AuthenticatedClientAsync("checkin_handoff_be@pulse.io");
 
-        var created = await client.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Profile page", points = 3,
             dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)).ToString("yyyy-MM-dd"),
             projectId = project.Id, assigneeId = backend.Id, requiresFrontendHandoff = true,
         });
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<Pulse.Application.Tasks.TaskDto>>(JsonOpts))!.Data!;
 
         (await client.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/hand-off-to-frontend", new { frontendAssigneeId = frontend.Id }))
             .StatusCode.Should().Be(HttpStatusCode.OK);

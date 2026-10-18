@@ -18,4 +18,6 @@ public record ThresholdsDto(
     int QaLeadTimeDays,
     IReadOnlyList<PointScaleEntryDto> PointScale,
     IReadOnlyList<PriorityScaleEntryDto> PriorityScale,
-    bool UseProgressInWorkload = false);
+    bool UseProgressInWorkload = false,
+    bool UseEarnedPointsInVelocity = false,
+    bool EngineersCanCreateTasks = false);

@@ -1,4 +1,5 @@
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Overwork;
 using Pulse.Application.Projects;
 using Pulse.Domain.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,13 @@ public class ProjectRepository : IProjectRepository
 {
     private readonly PulseDbContext _db;
 
-    public ProjectRepository(PulseDbContext db) => _db = db;
+    private readonly OverworkThresholds _thresholds;
+
+    public ProjectRepository(PulseDbContext db, OverworkThresholds thresholds)
+    {
+        _db = db;
+        _thresholds = thresholds;
+    }
 
     public async Task<Project?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
@@ -99,7 +106,7 @@ public class ProjectRepository : IProjectRepository
                      && x.t.ParentTaskId == null
                      && x.h.Field == "status"
                      && x.h.NewValue == "Done"
-                     && x.h.ChangedAt >= sixWeeksAgo)
+                     && x.h.ChangedAt >= _thresholds.FloorTime(sixWeeksAgo))
             .Select(x => new { x.t.Points, x.h.ChangedAt })
             .ToListAsync(ct);
 
@@ -110,6 +117,27 @@ public class ProjectRepository : IProjectRepository
                 return DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow));
             })
             .Select(g => new WeeklyThroughputPoint(g.Key, g.Sum(x => x.Points)))
+            .OrderBy(p => p.WeekOf)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedAsync(Guid projectId, CancellationToken ct = default)
+    {
+        var since = _thresholds.FloorTime(DateTime.UtcNow.AddDays(-42));
+        var credits = await _db.TaskProgressCredits
+            .Join(_db.Tasks, c => c.TaskId, t => t.Id, (c, t) => new { c, t })
+            .Where(x => x.t.ProjectId == projectId && x.c.CreditedAt >= since)
+            .Select(x => new { x.c.Points, x.c.CreditedAt })
+            .ToListAsync(ct);
+
+        // Weeks run Monday to Sunday, like the delivered series.
+        return credits
+            .GroupBy(c =>
+            {
+                var dow = (int)c.CreditedAt.DayOfWeek;
+                return DateOnly.FromDateTime(c.CreditedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+            })
+            .Select(g => new WeeklyEarnedPoint(g.Key, g.Sum(c => c.Points)))
             .OrderBy(p => p.WeekOf)
             .ToList();
     }
