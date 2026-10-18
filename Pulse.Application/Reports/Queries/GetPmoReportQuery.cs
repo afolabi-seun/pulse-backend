@@ -141,6 +141,7 @@ public class GetPmoReportHandler : IRequestHandler<GetPmoReportQuery, ServiceRes
         // allActiveTasks already includes InQa (it's everything not Done) — a separate, additive
         // view alongside tasksByAssignee, not a broadening of it: see EngineerUtilizationEntry's
         // TasksInQa/PointsInQa comment for why these stay apart from ActiveTasks/TotalPoints.
+        var notCountedByAssignee = UtilizationEntryBuilder.NotCountedByAssignee(allActiveTasks);
         var inQaTasksByAssignee = allActiveTasks
             .Where(t => t.AssigneeId.HasValue && t.Status == Domain.Tasks.TaskStatus.InQa)
             .GroupBy(t => t.AssigneeId!.Value)
@@ -189,7 +190,7 @@ public class GetPmoReportHandler : IRequestHandler<GetPmoReportQuery, ServiceRes
             var entries = teamEngineers.Select(engineer => UtilizationEntryBuilder.Build(
                 engineer, tasksByAssignee, inQaTasksByAssignee,
                 checkInCounts, blockersByAssignee, hoursThisWeek, completedTasksByEngineer,
-                subtasksCompletedByEngineer, workloadByEngineer)).ToList();
+                subtasksCompletedByEngineer, workloadByEngineer, notCountedByAssignee)).ToList();
 
             int overworkedCount = entries.Count(e => e.IsOverworked);
             // Null (not 0) when the team has nobody delivery-eligible to average over — e.g. every

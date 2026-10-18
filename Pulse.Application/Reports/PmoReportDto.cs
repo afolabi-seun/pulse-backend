@@ -25,7 +25,11 @@ public record EngineerUtilizationEntry(
     int SubtasksCompleted = 0,
     // The part of TotalPoints due within the engineer's baseline cycle (plus overdue/undated) — the number the
     // overwork signal compares with the baseline, and what IsOverworked is decided on. See EngineerWorkloadAssessor.
-    int CyclePoints = 0);
+    int CyclePoints = 0,
+    // Work that is NOT part of the workload above, so it stays visible: tasks paused by their assignee, and Backlog tasks already assigned to
+    // this engineer but with no estimate (so no time can be logged against them yet).
+    int PausedTasks = 0,
+    int UnestimatedBacklogTasks = 0);
 
 public record TeamUtilizationDto(
     Guid TeamId,
