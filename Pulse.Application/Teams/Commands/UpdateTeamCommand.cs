@@ -13,17 +13,21 @@ public record UpdateTeamCommand(
     string? Department,
     bool? ClearDepartment,
     Guid ActorId,
-    string? IpAddress) : IRequest<ServiceResult<TeamDto>>;
+    string? IpAddress,
+    Guid? HeadId = null,
+    bool? ClearHead = null) : IRequest<ServiceResult<TeamDto>>;
 
 public class UpdateTeamHandler : IRequestHandler<UpdateTeamCommand, ServiceResult<TeamDto>>
 {
     private readonly ITeamRepository _teams;
     private readonly IAuditLogRepository _audit;
+    private readonly IEngineerRepository _engineers;
 
-    public UpdateTeamHandler(ITeamRepository teams, IAuditLogRepository audit)
+    public UpdateTeamHandler(ITeamRepository teams, IAuditLogRepository audit, IEngineerRepository engineers)
     {
         _teams = teams;
         _audit = audit;
+        _engineers = engineers;
     }
 
     public async Task<ServiceResult<TeamDto>> Handle(UpdateTeamCommand cmd, CancellationToken ct)
@@ -32,8 +36,16 @@ public class UpdateTeamHandler : IRequestHandler<UpdateTeamCommand, ServiceResul
         if (team is null)
             return ServiceResult<TeamDto>.Fail("NOT_FOUND", $"Team '{cmd.TeamId}' not found.");
 
+        if (cmd.HeadId is Guid headId && cmd.ClearHead != true && await TeamHead.ValidateAsync(headId, _engineers, ct) is { } problem)
+            return ServiceResult<TeamDto>.Fail(problem.Code, problem.Message);
+
         if (cmd.Name is not null)
             team.Update(cmd.Name);
+
+        if (cmd.ClearHead == true)
+            team.SetHead(null);
+        else if (cmd.HeadId.HasValue)
+            team.SetHead(cmd.HeadId);
 
         if (cmd.ClearTeamLead == true)
             team.SetTeamLead(null);

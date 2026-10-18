@@ -32,6 +32,7 @@ public class EscalationDigestJob : IRecurringJob
     private readonly ITaskRepository _tasks;
     private readonly IProjectRepository _projects;
     private readonly IEngineerRepository _engineers;
+    private readonly ITeamRepository _teams;
     private readonly IProjectAccessPolicy _access;
     private readonly INotificationRepository _notifications;
     private readonly INotificationDispatcher _notify;
@@ -43,6 +44,7 @@ public class EscalationDigestJob : IRecurringJob
         ITaskRepository tasks,
         IProjectRepository projects,
         IEngineerRepository engineers,
+        ITeamRepository teams,
         IProjectAccessPolicy access,
         INotificationRepository notifications,
         INotificationDispatcher notify,
@@ -53,6 +55,7 @@ public class EscalationDigestJob : IRecurringJob
         _tasks = tasks;
         _projects = projects;
         _engineers = engineers;
+        _teams = teams;
         _access = access;
         _notifications = notifications;
         _notify = notify;
@@ -100,6 +103,22 @@ public class EscalationDigestJob : IRecurringJob
             return ok;
         }
 
+        // The head a task's owning team names, if any. A department head hears about the team's tasks only when they are that head: the department
+        // label alone cannot separate two heads whose departments carry the same label.
+        var namedHeads = new Dictionary<Guid, Guid?>();
+        async Task<Guid?> NamedHeadAsync(Guid projectId)
+        {
+            if (!namedHeads.TryGetValue(projectId, out var headId))
+            {
+                var project = await _projects.GetByIdAsync(projectId, ct);
+                var team = project?.OwnerTeamId is Guid ownerTeamId ? await _teams.GetByIdAsync(ownerTeamId, ct) : null;
+                headId = team?.HeadId is Guid named && recipients.Any(r => r.Person.Id == named) ? named : null;
+                namedHeads[projectId] = headId;
+            }
+            return headId;
+        }
+        var headRecipients = recipients.Where(r => r.Levels == HeadLevels).Select(r => r.Person.Id).ToHashSet();
+
         foreach (var recipient in recipients)
         {
             var since = SinceFor(recipient);
@@ -108,6 +127,7 @@ public class EscalationDigestJob : IRecurringJob
             {
                 if (!live.TryGetValue(taskEvents.Key, out var task)) continue;
                 if (!await CanOpenAsync(recipient.Person, task.ProjectId)) continue;
+                if (headRecipients.Contains(recipient.Person.Id) && await NamedHeadAsync(task.ProjectId) is Guid named && named != recipient.Person.Id) continue;
                 lines.Add(new Line(task, DueDateWording.DaysUntil(task.DueDate!.Value, now) < 0));
             }
             if (lines.Count == 0) continue;

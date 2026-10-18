@@ -310,4 +310,78 @@ public class EstimationApprovalTests
         state.Stage.Should().Be(ApprovalStage.Pmo);
         state.Approvers.Select(a => a.Id).Should().BeEquivalentTo([pm.Id]);
     }
+
+    // ── A head named on the team ──────────────────────────────────────────────
+
+    /// <summary>R&D and Infra both carry the Department label "Engineering", so the label alone matches both heads — the shape of the real data.</summary>
+    private (Engineer Assignee, Engineer Seun, Engineer Felix, Team Infra, Project Project) SeedTwoHeadsOneLabel()
+    {
+        var rnd = Team.Create("R&D");
+        rnd.SetDepartment("Engineering");
+        var infra = Team.Create("Engineering/Infra/DevOps");
+        infra.SetDepartment("Engineering");
+        var seun = Engineer.Create("Seun", "seun@x.io", "hash", Roles.HeadOfRnD, 20, 14);
+        seun.AssignToTeam(rnd.Id);
+        var felix = Engineer.Create("Felix", "felix@x.io", "hash", Roles.HeadOfInfraDevOps, 20, 14);
+        felix.AssignToTeam(infra.Id);
+        var assignee = Engineer.Create("Dev", "dev@x.io", "hash", Roles.Engineer, 20, 14);
+        assignee.AssignToTeam(infra.Id);
+
+        var project = Project.Create("Infra work", ownerTeamId: infra.Id);
+        _projects.Setup(p => p.GetByIdAsync(project.Id, default)).ReturnsAsync(project);
+        _teams.Setup(r => r.GetByIdAsync(rnd.Id, default)).ReturnsAsync(rnd);
+        _teams.Setup(r => r.GetByIdAsync(infra.Id, default)).ReturnsAsync(infra);
+        _teams.Setup(r => r.ListAllAsync(default)).ReturnsAsync([rnd, infra]);
+        _engineers.Setup(r => r.GetByIdAsync(assignee.Id, default)).ReturnsAsync(assignee);
+        _engineers.Setup(r => r.GetByIdAsync(seun.Id, default)).ReturnsAsync(seun);
+        _engineers.Setup(r => r.GetByIdAsync(felix.Id, default)).ReturnsAsync(felix);
+        _engineers.Setup(r => r.ListActiveAsync(default)).ReturnsAsync([assignee, seun, felix]);
+        return (assignee, seun, felix, infra, project);
+    }
+
+    [Fact]
+    public async Task Without_a_named_head_two_heads_who_share_a_department_label_both_count()
+    {
+        var (assignee, seun, felix, _, project) = SeedTwoHeadsOneLabel();
+
+        var state = await EstimationApproval.ResolveApproversAsync(project.Id, assignee.Id, ApprovalStage.DepartmentHead, null, _projects.Object, _engineers.Object, _teams.Object, default);
+
+        state.Approvers.Select(a => a.Id).Should().BeEquivalentTo([seun.Id, felix.Id], "this is the ambiguity the named head removes");
+    }
+
+    [Fact]
+    public async Task A_head_named_on_the_team_is_the_only_head_asked_even_when_another_shares_the_label()
+    {
+        var (assignee, seun, felix, infra, project) = SeedTwoHeadsOneLabel();
+        infra.SetHead(felix.Id);
+
+        var state = await EstimationApproval.ResolveApproversAsync(project.Id, assignee.Id, ApprovalStage.DepartmentHead, null, _projects.Object, _engineers.Object, _teams.Object, default);
+
+        state.Approvers.Select(a => a.Id).Should().BeEquivalentTo([felix.Id]);
+        state.Approvers.Should().NotContain(a => a.Id == seun.Id);
+    }
+
+    [Fact]
+    public async Task A_named_head_who_is_no_longer_active_falls_back_to_the_department_label()
+    {
+        var (assignee, seun, felix, infra, project) = SeedTwoHeadsOneLabel();
+        infra.SetHead(felix.Id);
+        felix.Deactivate();
+        _engineers.Setup(r => r.ListActiveAsync(default)).ReturnsAsync([assignee, seun]);
+
+        var state = await EstimationApproval.ResolveApproversAsync(project.Id, assignee.Id, ApprovalStage.DepartmentHead, null, _projects.Object, _engineers.Object, _teams.Object, default);
+
+        state.Approvers.Select(a => a.Id).Should().BeEquivalentTo([seun.Id], "the request must not end up with nobody");
+    }
+
+    [Fact]
+    public async Task The_assignees_department_heads_helper_also_prefers_the_named_head()
+    {
+        var (assignee, seun, felix, infra, _) = SeedTwoHeadsOneLabel();
+        infra.SetHead(felix.Id);
+
+        var heads = await Pulse.Application.Common.DepartmentScope.GetDepartmentHeadsAsync(assignee.Id, _engineers.Object, _teams.Object, default);
+
+        heads.Select(h => h.Id).Should().BeEquivalentTo([felix.Id]);
+    }
 }

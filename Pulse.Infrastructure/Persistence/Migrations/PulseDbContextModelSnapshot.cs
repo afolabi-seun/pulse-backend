@@ -2018,6 +2018,10 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("department");
 
+                    b.Property<Guid?>("HeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("head_id");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
