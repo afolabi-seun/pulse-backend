@@ -158,6 +158,7 @@ internal static class WeeklyReportAssembler
             .GroupBy(t => t.AssigneeId!.Value)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Tasks.PulseTask>)g.ToList());
         // allActiveTasks already includes InQa — see GetPmoReportQuery's identical comment.
+        var notCountedByAssignee = UtilizationEntryBuilder.NotCountedByAssignee(allActiveTasks);
         var inQaTasksByAssignee = allActiveTasks
             .Where(t => t.AssigneeId.HasValue && t.Status == Domain.Tasks.TaskStatus.InQa)
             .GroupBy(t => t.AssigneeId!.Value)
@@ -198,7 +199,7 @@ internal static class WeeklyReportAssembler
         var utilizationEntries = deliveryTeamEngineers.Select(engineer => UtilizationEntryBuilder.Build(
             engineer, tasksByAssignee, inQaTasksByAssignee,
             checkInCounts, blockersByAssignee, hoursThisWeek, completedTasksByEngineer,
-            subtasksCompletedByEngineer, workloadByEngineer)).ToList();
+            subtasksCompletedByEngineer, workloadByEngineer, notCountedByAssignee)).ToList();
 
         var overworkedCount = utilizationEntries.Count(e => e.IsOverworked);
         // Null (not 0) when nobody delivery-eligible is left on the team — see TeamUtilizationDto.AvgLoadPct.

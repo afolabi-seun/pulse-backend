@@ -19,12 +19,14 @@ public static class UtilizationEntryBuilder
         IReadOnlyDictionary<Guid, decimal> hoursThisWeek,
         IReadOnlyDictionary<Guid, int> completedTasksByEngineer,
         IReadOnlyDictionary<Guid, int> subtasksCompletedByEngineer,
-        IReadOnlyDictionary<Guid, EngineerWorkload> workloadByEngineer)
+        IReadOnlyDictionary<Guid, EngineerWorkload> workloadByEngineer,
+        IReadOnlyDictionary<Guid, (int Paused, int Unestimated)>? notCountedByAssignee = null)
     {
         var tasks = tasksByAssignee.TryGetValue(engineer.Id, out var t) ? t : Array.Empty<PulseTask>();
         var inQaTasks = inQaTasksByAssignee.TryGetValue(engineer.Id, out var q) ? q : Array.Empty<PulseTask>();
         // Who is overworked, and how much is due this cycle, is decided in one place — see EngineerWorkloadAssessor.
         var workload = workloadByEngineer.GetValueOrDefault(engineer.Id) ?? new EngineerWorkload(tasks.Count, tasks.Sum(x => x.Points), 0, false);
+        var (paused, unestimated) = notCountedByAssignee?.GetValueOrDefault(engineer.Id) ?? default;
         checkInCounts.TryGetValue(engineer.Id, out var ciCount);
         blockersByAssignee.TryGetValue(engineer.Id, out var bCount);
         hoursThisWeek.TryGetValue(engineer.Id, out var hrs);
@@ -33,8 +35,18 @@ public static class UtilizationEntryBuilder
 
         return new EngineerUtilizationEntry(
             engineer.Id, engineer.Name, engineer.Role,
-            tasks.Count, tasks.Sum(x => x.Points), engineer.BaselinePoints,
+            // The workload figure, so Points agrees with "due this cycle" and the overwork flag whichever way the PMO has chosen to count points.
+            tasks.Count, workload.ActivePoints, engineer.BaselinePoints,
             workload.IsOverworked, ciCount, bCount, hrs, completedCount,
-            inQaTasks.Count, inQaTasks.Sum(x => x.Points), subtasksCount, workload.CyclePoints);
+            inQaTasks.Count, inQaTasks.Sum(x => x.Points), subtasksCount, workload.CyclePoints, paused, unestimated);
     }
+
+    /// <summary>For each assignee, the tasks that sit outside their workload and would otherwise go unseen: paused ones, and Backlog ones with no estimate.
+    /// Taken from the not-done tasks the reports already load.</summary>
+    public static IReadOnlyDictionary<Guid, (int Paused, int Unestimated)> NotCountedByAssignee(IEnumerable<PulseTask> notDoneTasks) =>
+        notDoneTasks
+            .Where(t => t.AssigneeId.HasValue && t.ParentTaskId is null
+                        && (t.Status == Domain.Tasks.TaskStatus.Paused || (t.Status == Domain.Tasks.TaskStatus.Backlog && t.Points < 1)))
+            .GroupBy(t => t.AssigneeId!.Value)
+            .ToDictionary(g => g.Key, g => (g.Count(t => t.Status == Domain.Tasks.TaskStatus.Paused), g.Count(t => t.Status == Domain.Tasks.TaskStatus.Backlog)));
 }
