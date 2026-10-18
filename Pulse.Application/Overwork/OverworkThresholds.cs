@@ -41,10 +41,19 @@ public class OverworkThresholds
     // beat before the full PM/dept-head broadcast goes out for work they just got back.
     public double EscalationReactivationGraceHours { get; set; } = 24.0;
 
-    // How long a pending Planning Poker estimate sits with just the assignee's Team Lead before
-    // the department head also gets visibility — the Team Lead keeps the ability to act after
-    // this, the head just stops having to wait on them. See EstimateApprovalEscalationScanner.
-    public double EstimateApprovalEscalationHours { get; set; } = 24.0;
+    // How long a pending Planning Poker estimate sits with just the owning team's lead before the department head(s) are added, and then how long
+    // before the PMO is added too. Anyone already able to approve keeps that ability. Counted in working hours only (see WorkingHours), so a request
+    // made on a Friday evening does not page anyone over the weekend. See EstimateApprovalEscalationScanner.
+    public double EstimateApprovalEscalationHours { get; set; } = 1.0;
+    public double EstimateApprovalPmoEscalationHours { get; set; } = 1.0;
+
+    // The working day, Monday to Friday, in UTC.
+    public int WorkdayStartHourUtc { get; set; } = 8;
+    public int WorkdayEndHourUtc { get; set; } = 18;
+
+    // A task paused for this many working days is raised with its team lead, department heads and the PMO, and again every this many days while it
+    // stays paused. See PausedTaskReminderJob.
+    public int PausedTaskReminderBusinessDays { get; set; } = 5;
 
     // QA hand-off — business days given to review, starting the day a task is sent to QA
     // (see BusinessDays.Add; independent of the original task's own due date)

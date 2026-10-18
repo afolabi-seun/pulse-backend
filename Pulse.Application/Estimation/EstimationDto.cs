@@ -16,4 +16,6 @@ public record EstimationDto(
     bool CanApprove = false,
     /// <summary>Whether the pending request has escalated past the Team Lead tier to also include
     /// the department head — see TaskEstimationSession.EscalatedToHead.</summary>
-    bool IsEscalated = false);
+    bool IsEscalated = false,
+    /// <summary>Whether it has gone on to the PMO as well, the last tier — see TaskEstimationSession.EscalatedToPmo.</summary>
+    bool IsEscalatedToPmo = false);

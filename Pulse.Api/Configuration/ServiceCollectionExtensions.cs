@@ -11,6 +11,7 @@ using Pulse.Application.Common.Interfaces;
 using Pulse.Application.CheckIns;
 using Pulse.Application.Escalations;
 using Pulse.Application.Estimation;
+using Pulse.Application.Tasks;
 using Pulse.Application.Notifications;
 using Pulse.Application.Overwork;
 using Pulse.Application.Vitals;
@@ -223,6 +224,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SendEmailJob>();
         services.AddScoped<OverworkDigestJob>();
         services.AddScoped<EscalationDigestJob>();
+        services.AddScoped<PausedTaskReminderJob>();
         // Thresholds are per organization: a singleton cache, resolved per request for the caller's org.
         services.AddSingleton<OrganizationThresholdsCache>();
         services.AddScoped<OrganizationThresholdsProvider>();

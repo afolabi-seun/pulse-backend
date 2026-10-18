@@ -322,6 +322,11 @@ public class TaskRepository : ITaskRepository
     public async Task<IReadOnlyList<PulseTask>> GetBlockedTasksAsync(CancellationToken ct = default) =>
         await WithoutPersonal(_db.Tasks).Where(t => t.Status == Domain.Tasks.TaskStatus.Blocked).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<PulseTask>> GetPausedTasksAsync(CancellationToken ct = default) =>
+        await WithoutPersonal(_db.Tasks)
+            .Where(t => t.Status == Domain.Tasks.TaskStatus.Paused && !t.PausedByProject && t.PausedAt != null)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyDictionary<Guid, DateTime>> GetBlockedSinceAsync(IReadOnlyList<Guid> taskIds, CancellationToken ct = default)
     {
         if (taskIds.Count == 0) return new Dictionary<Guid, DateTime>();

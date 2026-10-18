@@ -29,6 +29,7 @@ public static class NotificationCatalog
         new(NotificationKind.EscalationT1, "Escalations", "T-1 off-ramp", "A task is due tomorrow"),
         new(NotificationKind.EscalationOverdue, "Escalations", "Overdue", "A task is past its due date"),
         new(NotificationKind.EscalationDigest, "Escalations", "Due-date digest", "One weekday summary of tasks that reached a due-date warning (department heads and the PMO)"),
+        new(NotificationKind.PausedTaskReminder, "Escalations", "Paused task reminder", "A task has been paused for a week or more and needs a decision (team lead, department heads and the PMO)"),
 
         // Tasks
         new(NotificationKind.TaskAssigned, "Tasks", "Task assigned", "A task was assigned to you"),

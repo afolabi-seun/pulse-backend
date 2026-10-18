@@ -58,4 +58,48 @@ public class TaskEstimationSessionTests
 
         session.EscalatedToHead.Should().BeFalse();
     }
+
+    [Fact]
+    public void EscalateToHead_records_when_it_happened()
+    {
+        var session = PendingSession();
+        var at = new DateTime(2026, 10, 14, 11, 0, 0, DateTimeKind.Utc);
+
+        session.EscalateToHead(at);
+
+        session.EscalatedToHeadAt.Should().Be(at);
+    }
+
+    [Fact]
+    public void EscalateToPmo_sets_the_flag_and_throws_when_nothing_is_pending()
+    {
+        var pending = PendingSession();
+        pending.EscalateToPmo();
+        pending.EscalatedToPmo.Should().BeTrue();
+
+        var act = () => TaskEstimationSession.Create(Guid.NewGuid()).EscalateToPmo();
+        act.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void A_fresh_submission_or_a_rejection_clears_every_escalation()
+    {
+        var session = PendingSession();
+        session.EscalateToHead();
+        session.EscalateToPmo();
+
+        session.ClearApprovalRequest();
+
+        session.EscalatedToHead.Should().BeFalse();
+        session.EscalatedToHeadAt.Should().BeNull();
+        session.EscalatedToPmo.Should().BeFalse();
+    }
+
+    private static TaskEstimationSession PendingSession()
+    {
+        var session = TaskEstimationSession.Create(Guid.NewGuid());
+        session.Reveal();
+        session.SubmitForApproval(5, Guid.NewGuid());
+        return session;
+    }
 }
