@@ -22,20 +22,16 @@ public class EscalationScannerTests
     private readonly Mock<INotificationRepository> _notifications = new();
     private readonly Mock<IRealtimeNotifier> _realtime = new();
     private readonly OverworkThresholds _thresholds = new();
-    private readonly Mock<IProjectAccessPolicy> _access = new();
 
     public EscalationScannerTests()
     {
         // Personal tasks are read from their own query; most tests have none.
         _tasks.Setup(r => r.GetPersonalEscalationCandidatesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<PulseTask>());
-        _access
-            .Setup(a => a.CanAccessProjectAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
     }
 
     private EscalationScanner CreateScanner() =>
-        new(_tasks.Object, _events.Object, _engineers.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _thresholds, _access.Object);
+        new(_tasks.Object, _events.Object, _engineers.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue), _thresholds);
 
     private static PulseTask ShortTask(DateOnly dueDate)
     {
@@ -162,43 +158,23 @@ public class EscalationScannerTests
     }
 
     [Fact]
-    public async Task FiresOverdue_ForNonQaTask_OnlyNotifiesManagersWhoCanAccessTheProject()
+    public async Task FiresOverdue_ForNonQaTask_TellsTheAssigneeAndTeamLeadPerTask_AndLeavesPmsAndHeadsToTheDigest()
     {
-        // A department head outside this project's own department used to get the same
-        // "overdue" ping as everyone else and just 403'd trying to open it.
-        var dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-        var task = ShortTask(dueDate); // no ParentTaskId — the full PM/head broadcast path
-        SetActivatedAt(task, DateTime.UtcNow.AddDays(-5));
-
+        // Heads and the PMO used to get an alert and an email for every overdue task; they now get one digest a weekday (EscalationDigestJob).
+        // The scanner never asks for them, so a department head outside the project's department no longer even needs an access check here.
+        var lead = Engineer.Create("Tola Lead", "tola@test.io", "hash", Roles.TeamLead, 20, 14);
         var pm = Engineer.Create("Priya PM", "priya@test.io", "hash", Roles.ProjectManager, 20, 14);
-        var headWithAccess = Engineer.Create("Head With Access", "headyes@test.io", "hash", Roles.HeadOfRnD, 20, 14);
-        var headWithoutAccess = Engineer.Create("Head Without Access", "headno@test.io", "hash", Roles.HeadOfDesign, 20, 14);
+        var head = Engineer.Create("Head Of RnD", "head@test.io", "hash", Roles.HeadOfRnD, 20, 14);
+        _engineers.Setup(e => e.ListByRoleAsync(Roles.ProjectManager, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { pm });
+        _engineers.Setup(e => e.ListByRoleAsync(Roles.HeadOfRnD, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { head });
 
-        _tasks.Setup(r => r.GetEscalationCandidatesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(new[] { task });
-        _events.Setup(e => e.AlreadyFiredAsync(task.Id, EscalationLevel.Overdue, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(false);
-        _engineers.Setup(e => e.GetByIdAsync(task.AssigneeId!.Value, It.IsAny<CancellationToken>()))
-                  .ReturnsAsync((Engineer?)null);
-        _engineers.Setup(e => e.ListByRoleAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(Array.Empty<Engineer>());
-        _engineers.Setup(e => e.ListByRoleAsync(Roles.ProjectManager, It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(new[] { pm });
-        _engineers.Setup(e => e.ListByRoleAsync(Roles.HeadOfRnD, It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(new[] { headWithAccess });
-        _engineers.Setup(e => e.ListByRoleAsync(Roles.HeadOfDesign, It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(new[] { headWithoutAccess });
-        _notifications.Setup(n => n.SaveChangesAsync(It.IsAny<CancellationToken>()))
-                      .Returns(Task.CompletedTask);
+        var sent = await ScanAsync(Wednesday, new DateOnly(2026, 10, 12), Wednesday.AddDays(-20), lead);
 
-        _access.Setup(a => a.CanAccessProjectAsync(task.ProjectId, headWithoutAccess.Id, Roles.HeadOfDesign, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(false);
-
-        await CreateScanner().RunAsync();
-
-        _notifications.Verify(n => n.AddAsync(It.Is<Notification>(x => x.UserId == pm.Id), It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.AddAsync(It.Is<Notification>(x => x.UserId == headWithAccess.Id), It.IsAny<CancellationToken>()), Times.Once);
-        _notifications.Verify(n => n.AddAsync(It.Is<Notification>(x => x.UserId == headWithoutAccess.Id), It.IsAny<CancellationToken>()), Times.Never);
+        sent.Select(m => m.To).Should().BeEquivalentTo("ada@test.io", "tola@test.io");
+        sent.Single(m => m.To == "tola@test.io").Subject.Should().Be("Overdue task alert: Test task");
+        _notifications.Verify(n => n.AddAsync(It.Is<Notification>(x => x.UserId == pm.Id || x.UserId == head.Id), It.IsAny<CancellationToken>()), Times.Never);
+        _engineers.Verify(e => e.ListByRoleAsync(Roles.ProjectManager, It.IsAny<CancellationToken>()), Times.Never);
+        _engineers.Verify(e => e.ListByRoleAsync(Roles.HeadOfRnD, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -369,5 +345,117 @@ public class EscalationScannerTests
         await CreateScanner().RunAsync();
 
         notified.Should().Equal(owner.Id);
+    }
+
+    // ── What the notification says about the due date ─────────────────────────────────────────────────────────────────────────────
+
+    // A fixed weekday: the scanner sends no emails at weekends, and the wording depends on the date. Wednesday 14 Oct 2026, 10:00 UTC.
+    private static readonly DateTime Wednesday = new(2026, 10, 14, 10, 0, 0, DateTimeKind.Utc);
+
+    private sealed class FixedClock(DateTime utc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utc, TimeSpan.Zero);
+    }
+
+    private EscalationScanner ScannerAt(DateTime utc) =>
+        new(_tasks.Object, _events.Object, _engineers.Object, _teams.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue),
+            _thresholds, new FixedClock(utc));
+
+    /// <summary>Runs one scan at <paramref name="now"/> over a single task and returns the emails it queued as (to, subject, body).</summary>
+    private async Task<List<(string To, string Subject, string Body)>> ScanAsync(DateTime now, DateOnly due, DateTime activatedAt, Engineer? lead = null)
+    {
+        var task = ShortTask(due);
+        SetActivatedAt(task, activatedAt);
+        var assignee = Engineer.Create("Ada Assignee", "ada@test.io", "hash", Roles.Engineer, 20, 14);
+        typeof(PulseTask).GetProperty("AssigneeId")!.SetValue(task, assignee.Id);
+
+        if (lead is not null)
+        {
+            var team = Pulse.Domain.Teams.Team.Create("Platform", lead.Id, "Engineering");
+            assignee.AssignToTeam(team.Id);
+            _teams.Setup(t => t.GetByIdAsync(team.Id, It.IsAny<CancellationToken>())).ReturnsAsync(team);
+            _engineers.Setup(e => e.GetByIdAsync(lead.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lead);
+        }
+
+        _tasks.Setup(r => r.GetEscalationCandidatesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(new[] { task });
+        _events.Setup(e => e.AlreadyFiredAsync(task.Id, It.IsAny<EscalationLevel>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _engineers.Setup(e => e.GetByIdAsync(assignee.Id, It.IsAny<CancellationToken>())).ReturnsAsync(assignee);
+        _engineers.Setup(e => e.ListByRoleAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<Engineer>());
+        _notifications.Setup(n => n.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var sent = new List<(string, string, string)>();
+        _emailQueue.Setup(q => q.Enqueue(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback<string, string, string>((to, subject, body) => sent.Add((to, subject, body)));
+
+        await ScannerAt(now).RunAsync();
+        return sent;
+    }
+
+    [Fact]
+    public async Task The_3_day_stage_on_a_task_due_tomorrow_says_tomorrow_not_3_days()
+    {
+        // The reported bug: activated 3.3 days ago and due tomorrow, so 60% of its life has passed with a day or so left. The stage is "3 day",
+        // but the email must not claim three days.
+        var sent = await ScanAsync(Wednesday, new DateOnly(2026, 10, 15), Wednesday.AddDays(-3.3));
+
+        var mail = sent.Should().ContainSingle(m => m.To == "ada@test.io").Subject;
+        mail.Subject.Should().Be("Task due tomorrow: Test task");
+        mail.Body.Should().Contain("tomorrow").And.NotContain("3 days");
+    }
+
+    [Fact]
+    public async Task The_3_day_stage_names_the_real_number_of_days_left()
+    {
+        var sent = await ScanAsync(Wednesday, new DateOnly(2026, 10, 16), Wednesday.AddDays(-5));
+
+        var mail = sent.Should().ContainSingle(m => m.To == "ada@test.io").Subject;
+        mail.Subject.Should().Be("Task due in 2 days: Test task");
+        // The long date follows the machine's culture (day-first on the production server), so check its parts, not one layout.
+        mail.Body.Should().Contain("in 2 days").And.Contain("Friday").And.Contain("16").And.Contain("2026").And.NotContain("3 days");
+    }
+
+    [Fact]
+    public async Task The_1_day_stage_on_the_due_day_itself_says_today_not_tomorrow()
+    {
+        var sent = await ScanAsync(Wednesday, new DateOnly(2026, 10, 14), Wednesday.AddDays(-10));
+
+        var mail = sent.Should().ContainSingle(m => m.To == "ada@test.io").Subject;
+        mail.Subject.Should().Be("Task due today: Test task");
+        mail.Body.Should().Contain("today").And.NotContain("tomorrow");
+    }
+
+    [Fact]
+    public async Task The_team_lead_gets_the_same_true_wording()
+    {
+        var lead = Engineer.Create("Tola Lead", "tola@test.io", "hash", Roles.TeamLead, 20, 14);
+
+        var sent = await ScanAsync(Wednesday, new DateOnly(2026, 10, 15), Wednesday.AddDays(-3.3), lead);
+
+        var mail = sent.Should().ContainSingle(m => m.To == "tola@test.io").Subject;
+        mail.Subject.Should().Be("Team task due tomorrow: Test task");
+        mail.Body.Should().Contain("Ada Assignee").And.Contain("tomorrow").And.NotContain("3 days");
+    }
+
+    [Theory]
+    [InlineData("2026-10-13", "(yesterday)")]
+    [InlineData("2026-10-11", "(3 days ago)")]
+    public async Task An_overdue_email_says_how_long_ago_it_was_due(string due, string expected)
+    {
+        var sent = await ScanAsync(Wednesday, DateOnly.Parse(due), Wednesday.AddDays(-20));
+
+        var mail = sent.Should().ContainSingle(m => m.To == "ada@test.io").Subject;
+        mail.Subject.Should().Be("Overdue task: Test task");
+        mail.Body.Should().Contain(expected).And.Contain("now overdue");
+    }
+
+    [Fact]
+    public async Task No_emails_go_out_at_the_weekend_but_the_in_app_notification_still_does()
+    {
+        var saturday = new DateTime(2026, 10, 17, 10, 0, 0, DateTimeKind.Utc);
+
+        var sent = await ScanAsync(saturday, new DateOnly(2026, 10, 18), saturday.AddDays(-3.3));
+
+        sent.Should().BeEmpty();
+        _notifications.Verify(n => n.AddAsync(It.Is<Notification>(x => x.Kind == NotificationKind.EscalationT3), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

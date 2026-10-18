@@ -11,6 +11,9 @@ public interface IEscalationEventRepository
     Task ClearForTaskAsync(Guid taskId, CancellationToken ct = default);
     Task<DateTime?> GetLastFiredAtAsync(CancellationToken ct = default);
 
+    /// <summary>Every escalation event fired after <paramref name="since"/>, oldest first — what the daily digest is built from.</summary>
+    Task<IReadOnlyList<EscalationEvent>> ListFiredSinceAsync(DateTime since, CancellationToken ct = default);
+
     /// <summary>Count of distinct tasks assigned to the engineer (optionally scoped to one project) that fired
     /// at least one escalation event within the range — a near-miss signal, not just outright overdue tasks.</summary>
     Task<int> GetEscalatedTaskCountAsync(
