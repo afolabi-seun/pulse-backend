@@ -125,11 +125,9 @@ public class StartTimerCommandTests
     }
 
     [Fact]
-    public async Task Succeeds_for_an_ungroomed_Backlog_task_but_leaves_it_in_Backlog()
+    public async Task Refuses_an_unestimated_Backlog_task_and_does_not_claim_it()
     {
-        // Points no longer gate starting a timer — only auto-promotion out of Backlog still
-        // requires them (PromoteFromBacklogIfGroomed), so this succeeds and a timer starts, but
-        // the task's status doesn't change.
+        // Time is only logged against estimated work. The refusal must not leave the task claimed.
         var engineerId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
         var task = PulseTask.Create("Untriaged", 0, Guid.NewGuid());
@@ -140,9 +138,11 @@ public class StartTimerCommandTests
         var cmd = new StartTimerCommand(engineerId, Roles.Engineer, TimeEntryCategory.Task, taskId, null, engineerId, null);
         var result = await CreateHandler().Handle(cmd, default);
 
-        result.IsSuccess.Should().BeTrue();
-        task.Status.Should().Be(Pulse.Domain.Tasks.TaskStatus.Backlog);
-        _timers.Verify(r => r.AddAsync(It.IsAny<ActiveTimer>(), default), Times.Once);
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be("BUSINESS_RULE_VIOLATION");
+        result.ErrorMessage.Should().Contain("no estimate");
+        _tasks.Verify(r => r.SaveChangesAsync(default), Times.Never, "the claim must not be saved");
+        _timers.Verify(r => r.AddAsync(It.IsAny<ActiveTimer>(), default), Times.Never);
     }
 
     [Fact]

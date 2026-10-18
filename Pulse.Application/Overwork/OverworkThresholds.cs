@@ -55,6 +55,23 @@ public class OverworkThresholds
     // stays paused. See PausedTaskReminderJob.
     public int PausedTaskReminderBusinessDays { get; set; } = 5;
 
+    // Reporting baseline: the first day reports and charts start from. Nothing before it is deleted or archived; date-range reports (time, delivered
+    // points, throughput, performance, escalation counts) simply do not look further back. Null means no floor. A calendar day in the organization's
+    // local time (UTC+1, as the task archive's cutoff is), set by the PMO. Not a security boundary: the records are all still there.
+    public DateOnly? ReportingBaseline { get; set; }
+    public const int ReportingBaselineUtcOffsetHours = 1;
+
+    /// <summary>The later of <paramref name="date"/> and the reporting baseline.</summary>
+    public DateOnly FloorDate(DateOnly date) => ReportingBaseline is { } b && date < b ? b : date;
+
+    /// <summary>The later of <paramref name="at"/> and the start of the reporting baseline day (midnight local time, in UTC).</summary>
+    public DateTime FloorTime(DateTime at)
+    {
+        if (ReportingBaseline is not { } b) return at;
+        var start = DateTime.SpecifyKind(b.ToDateTime(TimeOnly.MinValue).AddHours(-ReportingBaselineUtcOffsetHours), DateTimeKind.Utc);
+        return at < start ? start : at;
+    }
+
     // QA hand-off — business days given to review, starting the day a task is sent to QA
     // (see BusinessDays.Add; independent of the original task's own due date)
     public int QaLeadTimeDays { get; set; } = 2;
@@ -120,6 +137,8 @@ public class OverworkThresholds
             EscalationT3MinHours = t3MinH;
         if (settings.TryGetValue("EscalationT1MinHours", out var v10) && double.TryParse(v10, out var t1MinH))
             EscalationT1MinHours = t1MinH;
+        if (settings.TryGetValue("ReportingBaseline", out var vBase) && DateOnly.TryParse(vBase, out var baseline))
+            ReportingBaseline = baseline;
         if (settings.TryGetValue("QaLeadTimeDays", out var v11) && int.TryParse(v11, out var qaLead))
             QaLeadTimeDays = qaLead;
         if (settings.TryGetValue("PointScale", out var psJson) && !string.IsNullOrEmpty(psJson))
