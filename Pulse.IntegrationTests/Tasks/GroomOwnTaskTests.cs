@@ -13,6 +13,8 @@ public class GroomOwnTaskTests : IntegrationTestBase, IClassFixture<PulseWebAppl
 {
     public GroomOwnTaskTests(PulseWebApplicationFactory factory) : base(factory) { }
 
+    /// <summary>A task an engineer filed for themselves, as they could before task creation was limited to the PMO, team leads and department heads.
+    /// Such tasks still exist, and still need grooming.</summary>
     private async Task<(TaskDto Task, System.Net.Http.HttpClient Client)> SeedSelfCreatedTaskAsync(string email)
     {
         var engineer = await SeedEngineerAsync(email, Roles.Engineer);
@@ -21,20 +23,13 @@ public class GroomOwnTaskTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         var project = await SeedProjectAsync($"{email}-project", team.Id);
         var client = await AuthenticatedClientAsync(email);
 
-        var created = await client.PostAsJsonAsync("/api/v1/tasks", new
-        {
-            title = "Self-filed task",
-            projectId = project.Id,
-            assigneeId = engineer.Id,
-            dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)).ToString("yyyy-MM-dd"),
-        });
-        created.StatusCode.Should().Be(HttpStatusCode.Created);
-        var body = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
+        var seeded = await SeedTaskAsync("Self-filed task", project.Id, points: 0, dueDaysFromNow: 5, assigneeId: engineer.Id, createdById: engineer.Id);
+        var body = (await (await client.GetAsync($"/api/v1/tasks/{seeded.Id}")).Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
         return (body, client);
     }
 
     [Fact]
-    public async Task Engineer_created_task_starts_ungroomed_and_in_backlog()
+    public async Task An_ungroomed_self_filed_task_sits_in_backlog_until_it_is_pointed()
     {
         var (task, _) = await SeedSelfCreatedTaskAsync("groom_seed@pulse.io");
 

@@ -410,7 +410,9 @@ public class TaskRepository : ITaskRepository
             .Where(x => x.ChangedAt >= _thresholds.FloorTime(from) && x.ChangedAt <= to)
             .ToList();
 
-        var deliveredPoints = completedInRange.Sum(t => t.Points);
+        var deliveredPoints = _thresholds.UseEarnedPointsInVelocity
+            ? await EarnedPointsInRangeAsync(from, to, [assigneeId], projectId.HasValue ? [projectId.Value] : null, ct)
+            : completedInRange.Sum(t => t.Points);
         var tasksCompleted = completedInRange.Count;
         // A completed task with no due date was never given a deadline to keep, so it's excluded
         // from both sides of the on-time ratio rather than counted as trivially on-time — a
@@ -604,6 +606,16 @@ public class TaskRepository : ITaskRepository
         return WeeklyEarned(credits.Select(c => (c.Points, c.CreditedAt)));
     }
 
+    public async Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedOrgWideAsync(CancellationToken ct = default)
+    {
+        var since = _thresholds.FloorTime(DateTime.UtcNow.AddDays(-42));
+        var credits = await _db.TaskProgressCredits
+            .Where(c => c.CreditedAt >= since)
+            .Select(c => new { c.Points, c.CreditedAt })
+            .ToListAsync(ct);
+        return WeeklyEarned(credits.Select(c => (c.Points, c.CreditedAt)));
+    }
+
     // Weeks run Monday to Sunday, like the delivered series.
     private static IReadOnlyList<WeeklyEarnedPoint> WeeklyEarned(IEnumerable<(decimal Points, DateTime At)> credits) =>
         credits
@@ -678,8 +690,28 @@ public class TaskRepository : ITaskRepository
             .ToList();
     }
 
+    /// <summary>Points earned in a period, from the credit ledger: the figure velocity and performance use when the PMO has chosen to measure in
+    /// earned points. Can be negative in a week where more was taken back than earned, so it is floored at zero for a headline number.</summary>
+    private async Task<int> EarnedPointsInRangeAsync(DateTime from, DateTime to,
+        IReadOnlyCollection<Guid>? engineerIds, IReadOnlyCollection<Guid>? projectIds, CancellationToken ct)
+    {
+        var credits = _db.TaskProgressCredits.Where(c => c.CreditedAt >= _thresholds.FloorTime(from) && c.CreditedAt <= to);
+        if (engineerIds is not null)
+            credits = credits.Where(c => c.EngineerId != null && engineerIds.Contains(c.EngineerId.Value));
+        if (projectIds is not null)
+            credits = credits.Join(_db.Tasks, c => c.TaskId, t => t.Id, (c, t) => new { c, t })
+                .Where(x => projectIds.Contains(x.t.ProjectId))
+                .Select(x => x.c);
+
+        var total = await credits.SumAsync(c => (decimal?)c.Points, ct) ?? 0m;
+        return (int)Math.Max(0m, Math.Round(total, MidpointRounding.AwayFromZero));
+    }
+
     public async Task<int> GetDeliveredPointsInRangeAsync(DateTime from, DateTime to, CancellationToken ct = default)
     {
+        if (_thresholds.UseEarnedPointsInVelocity)
+            return await EarnedPointsInRangeAsync(from, to, null, null, ct);
+
         var taskIds = await _db.TaskHistory
             .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Select(h => h.TaskId)
@@ -698,6 +730,9 @@ public class TaskRepository : ITaskRepository
 
     public async Task<int> GetDeliveredPointsInRangeAsync(DateTime from, DateTime to, IReadOnlyList<Guid> projectIds, CancellationToken ct = default)
     {
+        if (_thresholds.UseEarnedPointsInVelocity)
+            return await EarnedPointsInRangeAsync(from, to, null, projectIds, ct);
+
         var taskIds = await _db.TaskHistory
             .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Select(h => h.TaskId)
@@ -809,6 +844,9 @@ public class TaskRepository : ITaskRepository
 
     public async Task<int> GetDeliveredPointsInRangeByAssigneesAsync(DateTime from, DateTime to, IReadOnlyList<Guid> assigneeIds, CancellationToken ct = default)
     {
+        if (_thresholds.UseEarnedPointsInVelocity)
+            return await EarnedPointsInRangeAsync(from, to, assigneeIds, null, ct);
+
         // Credit the engineer CreditedEngineerId snapshotted at completion time (the lending
         // engineer if the task was on loan when it finished, otherwise the assignee) rather than
         // the task's current assignee, which may have changed since. Falls back to the task's

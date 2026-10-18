@@ -179,6 +179,8 @@ public interface ITaskRepository
     Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByAssigneeAsync(Guid engineerId, CancellationToken ct = default);
     /// <summary>The same for everyone on a team.</summary>
     Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByTeamAsync(Guid teamId, CancellationToken ct = default);
+    /// <summary>The same across the whole organization.</summary>
+    Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedOrgWideAsync(CancellationToken ct = default);
     /// <summary>Returns delivered story points grouped by week (Monday) for the 6-week rolling window ending
     /// today, across every team — the org-wide analogue of <see cref="GetWeeklyThroughputByTeamAsync"/>.</summary>
     Task<IReadOnlyList<WeeklyThroughputPoint>> GetWeeklyThroughputOrgWideAsync(CancellationToken ct = default);

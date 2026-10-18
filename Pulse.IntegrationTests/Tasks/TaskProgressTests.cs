@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using Pulse.Application.Common;
+using Pulse.Application.Meta;
 using Pulse.Application.Overwork;
+using Pulse.Application.Performance;
 using Pulse.Application.Projects.Queries;
+using Pulse.Application.Reports.Queries;
 using Pulse.Application.Thresholds;
 using Pulse.Application.Tasks;
 using Pulse.Domain.Engineers;
@@ -248,6 +251,105 @@ public class TaskProgressTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         weeks.Sum(w => w.PointsEarned).Should().Be(9m, "4 from the half-done task and all 5 of the finished one");
     }
 
+    [Fact]
+    public async Task The_projects_throughput_shows_points_earned_on_that_project_only()
+    {
+        var engineer = await SeedEngineerAsync("progproj_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("progproj_pmo@pulse.io", Roles.HeadOfPmo);
+        var project = await SeedProjectAsync("Throughput project");
+        var other = await SeedProjectAsync("Some other project");
+        var mine = await SeedTaskAsync("In this project", project.Id, points: 8, assigneeId: engineer.Id);
+        var elsewhere = await SeedTaskAsync("In another project", other.Id, points: 8, assigneeId: engineer.Id);
+        await ActAsync(mine.Id, (t, _) => { t.SetProgress(50, Guid.NewGuid()); return Task.CompletedTask; });
+        await ActAsync(elsewhere.Id, (t, _) => { t.SetProgress(75, Guid.NewGuid()); return Task.CompletedTask; });
+        var pmo = await AuthenticatedClientAsync("progproj_pmo@pulse.io");
+
+        var weeks = (await (await pmo.GetAsync($"/api/v1/projects/{project.Id}/throughput")).Content
+            .ReadFromJsonAsync<ApiResponse<List<ThroughputWeekDto>>>(JsonOpts))!.Data!;
+
+        weeks.Sum(w => w.PointsEarned).Should().Be(4m, "only the 50% of 8 on this project");
+        weeks.Sum(w => w.PointsDelivered).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task The_projects_throughput_starts_from_the_reporting_baseline()
+    {
+        var engineer = await SeedEngineerAsync("progproj2_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("progproj2_pmo@pulse.io", Roles.HeadOfPmo);
+        var project = await SeedProjectAsync("Baseline project");
+        var task = await SeedTaskAsync("Done long ago", project.Id, points: 5, assigneeId: engineer.Id);
+        await ActAsync(task.Id, (t, _) => { t.MarkDone(engineer.Id); return Task.CompletedTask; });
+        var pmo = await AuthenticatedClientAsync("progproj2_pmo@pulse.io");
+        async Task<int> DeliveredAsync() => (await (await pmo.GetAsync($"/api/v1/projects/{project.Id}/throughput")).Content
+            .ReadFromJsonAsync<ApiResponse<List<ThroughputWeekDto>>>(JsonOpts))!.Data!.Sum(w => w.PointsDelivered);
+
+        try
+        {
+            (await DeliveredAsync()).Should().Be(5);
+
+            // Baseline tomorrow: the finished task, done today, now falls before it.
+            var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+            (await pmo.PutAsync("/api/v1/reports/baseline", JsonContent.Create(new { date = tomorrow.ToString("yyyy-MM-dd") }))).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await DeliveredAsync()).Should().Be(0, "work finished before the baseline is not in the chart");
+        }
+        finally
+        {
+            await pmo.PutAsync("/api/v1/reports/baseline", JsonContent.Create(new { date = (string?)null }));
+        }
+        (await DeliveredAsync()).Should().Be(5, "removing the baseline brings it back");
+    }
+
+    [Fact]
+    public async Task The_organizations_delivery_trend_carries_earned_points_too()
+    {
+        var engineer = await SeedEngineerAsync("progorg_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("progorg_exec@pulse.io", Roles.Executive);
+        var project = await SeedProjectAsync("Org trend project");
+        var task = await SeedTaskAsync("Moving", project.Id, points: 8, assigneeId: engineer.Id);
+        await ActAsync(task.Id, (t, _) => { t.SetProgress(25, Guid.NewGuid()); return Task.CompletedTask; });
+        var exec = await AuthenticatedClientAsync("progorg_exec@pulse.io");
+
+        var trend = (await (await exec.GetAsync("/api/v1/reports/org-trend")).Content
+            .ReadFromJsonAsync<ApiResponse<OrgTrendDto>>(JsonOpts))!.Data!;
+
+        trend.DeliveryTrend.Sum(w => w.PointsEarned).Should().BeGreaterOrEqualTo(2m, "this task's 25% of 8, among whatever else the shared test server holds");
+    }
+
+    [Fact]
+    public async Task One_organizations_earned_points_never_appear_in_another_organizations_trend()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        Guid orgB;
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
+            var org = Pulse.Domain.Organizations.Organization.Create("Earned org B", $"earned-b-{suffix}");
+            db.Organizations.Add(org);
+            await db.SaveChangesAsync();
+            orgB = org.Id;
+        }
+        var engineer = await SeedEngineerAsync($"earn_a_eng_{suffix}@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync($"earn_a_exec_{suffix}@pulse.io", Roles.Executive);
+        var execB = await SeedEngineerAsync($"earn_b_exec_{suffix}@pulse.io", Roles.Executive);
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
+            db.Attach(execB);
+            db.Entry(execB).Property("OrganizationId").CurrentValue = orgB;
+            await db.SaveChangesAsync();
+        }
+        var project = await SeedProjectAsync($"Earned isolation {suffix}");
+        var task = await SeedTaskAsync("Moving in org A", project.Id, points: 8, assigneeId: engineer.Id);
+        await ActAsync(task.Id, (t, _) => { t.SetProgress(50, Guid.NewGuid()); return Task.CompletedTask; });
+
+        async Task<decimal> EarnedAsync(string email) =>
+            (await (await (await AuthenticatedClientAsync(email)).GetAsync("/api/v1/reports/org-trend")).Content
+                .ReadFromJsonAsync<ApiResponse<OrgTrendDto>>(JsonOpts))!.Data!.DeliveryTrend.Sum(w => w.PointsEarned);
+
+        (await EarnedAsync($"earn_a_exec_{suffix}@pulse.io")).Should().BeGreaterOrEqualTo(4m, "control: organization A sees its own earned points");
+        (await EarnedAsync($"earn_b_exec_{suffix}@pulse.io")).Should().Be(0m, "organization B has earned nothing and must not see A's");
+    }
+
     // ── the PMO's setting ────────────────────────────────────────────────────
 
     [Fact]
@@ -279,6 +381,45 @@ public class TaskProgressTests : IntegrationTestBase, IClassFixture<PulseWebAppl
         }
 
         (await ActivePointsAsync()).Should().Be(8);
+    }
+
+    [Fact]
+    public async Task Measuring_velocity_in_earned_points_changes_delivered_points_and_leaves_the_rest_alone()
+    {
+        var engineer = await SeedEngineerAsync("progvel_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("progvel_pmo@pulse.io", Roles.HeadOfPmo);
+        var project = await SeedProjectAsync("Progress velocity");
+        var half = await SeedTaskAsync("Half done", project.Id, points: 8, assigneeId: engineer.Id);
+        var finished = await SeedTaskAsync("Finished", project.Id, points: 5, assigneeId: engineer.Id);
+        await ActAsync(half.Id, (t, _) => { t.SetProgress(50, Guid.NewGuid()); return Task.CompletedTask; });
+        await ActAsync(finished.Id, (t, _) => { t.MarkDone(engineer.Id); return Task.CompletedTask; });
+        var eng = await AuthenticatedClientAsync("progvel_eng@pulse.io");
+        var pmo = await AuthenticatedClientAsync("progvel_pmo@pulse.io");
+
+        async Task<PerformanceMetricsDto> MineAsync() =>
+            (await (await eng.GetAsync("/api/v1/performance/me?days=30")).Content.ReadFromJsonAsync<ApiResponse<PerformanceMetricsDto>>(JsonOpts))!.Data!;
+        async Task<bool> MetaFlagAsync() =>
+            (await (await pmo.GetAsync("/api/v1/meta")).Content.ReadFromJsonAsync<ApiResponse<AppMetaDto>>(JsonOpts))!.Data!.MeasuresInEarnedPoints;
+
+        try
+        {
+            var before = await MineAsync();
+            before.DeliveredPoints.Should().Be(5, "off by default: only the finished task counts");
+            (await MetaFlagAsync()).Should().BeFalse();
+
+            (await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { useEarnedPointsInVelocity = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var after = await MineAsync();
+            after.DeliveredPoints.Should().Be(9, "5 from the finished task plus 4 earned on the half-done one");
+            after.TasksCompleted.Should().Be(before.TasksCompleted, "on-time rate, cycle time and the rest still count finished tasks");
+            (await MetaFlagAsync()).Should().BeTrue("so screens can say what they are counting");
+        }
+        finally
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { useEarnedPointsInVelocity = false });
+        }
+
+        (await MineAsync()).DeliveredPoints.Should().Be(5);
     }
 
     [Fact]

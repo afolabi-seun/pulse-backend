@@ -169,31 +169,6 @@ public class TasksTests : IntegrationTestBase, IClassFixture<PulseWebApplication
     }
 
     [Fact]
-    public async Task CreateTask_as_an_engineer_targeting_someone_else_is_silently_corrected_to_self()
-    {
-        // The create-page UI already locks the assignee picker to "Assign to me" for this role
-        // tier — this proves the backend enforces it too, not just the UI.
-        var engineer = await SeedEngineerAsync("create_self_assign_eng@pulse.io", Roles.Engineer);
-        var someoneElse = await SeedEngineerAsync("create_self_assign_other@pulse.io", Roles.Engineer);
-        var project = await SeedProjectAsync("Create self-assign project");
-        await SeedProjectMemberAsync(project.Id, engineer.Id);
-        var client = await AuthenticatedClientAsync("create_self_assign_eng@pulse.io");
-
-        var response = await client.PostAsJsonAsync("/api/v1/tasks", new
-        {
-            title = "Should land on me, not them",
-            points = 3,
-            dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)).ToString("yyyy-MM-dd"),
-            projectId = project.Id,
-            assigneeId = someoneElse.Id,
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var body = await response.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts);
-        body!.Data!.AssigneeId.Should().Be(engineer.Id);
-    }
-
-    [Fact]
     public async Task CreateTask_with_no_due_date_stores_null_not_year_one()
     {
         // Regression guard: CreateTaskRequest.DueDate used to be a non-nullable DateOnly, so
@@ -289,16 +264,17 @@ public class TasksTests : IntegrationTestBase, IClassFixture<PulseWebApplication
     }
 
     [Fact]
-    public async Task CreateTask_returns_201_for_engineer_who_is_a_project_member()
+    public async Task CreateTask_returns_201_for_a_team_lead_on_the_project_their_team_owns()
     {
-        var engineer = await SeedEngineerAsync("task_eng_member@pulse.io", Roles.Engineer);
-        var project = await SeedProjectAsync("Member-accessible project");
-        await SeedProjectMemberAsync(project.Id, engineer.Id);
-        var client = await AuthenticatedClientAsync("task_eng_member@pulse.io");
+        var lead = await SeedEngineerAsync("task_lead_owner@pulse.io", Roles.TeamLead);
+        var team = await SeedTeamAsync("Task lead owner team", lead.Id);
+        await AssignEngineerToTeamAsync(lead.Id, team.Id);
+        var project = await SeedProjectAsync("Lead-owned project", team.Id);
+        var client = await AuthenticatedClientAsync("task_lead_owner@pulse.io");
 
         var response = await client.PostAsJsonAsync("/api/v1/tasks", new
         {
-            title = "Self-service task",
+            title = "Planned by the lead",
             points = 2,
             dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)).ToString("yyyy-MM-dd"),
             projectId = project.Id
@@ -306,7 +282,147 @@ public class TasksTests : IntegrationTestBase, IClassFixture<PulseWebApplication
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts);
-        body!.Data!.Title.Should().Be("Self-service task");
+        body!.Data!.Title.Should().Be("Planned by the lead");
+    }
+
+    [Theory]
+    [InlineData(Roles.Engineer)]
+    [InlineData(Roles.Designer)]
+    public async Task CreateTask_is_refused_for_engineers_and_designers_with_a_message_saying_who_can(string role)
+    {
+        var person = await SeedEngineerAsync($"task_noncreator_{role}@pulse.io", role);
+        var project = await SeedProjectAsync($"Member project {role}");
+        await SeedProjectMemberAsync(project.Id, person.Id);
+        var client = await AuthenticatedClientAsync($"task_noncreator_{role}@pulse.io");
+
+        var response = await client.PostAsJsonAsync("/api/v1/tasks", new
+        {
+            title = "Should not be filed by me",
+            points = 2,
+            dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)).ToString("yyyy-MM-dd"),
+            projectId = project.Id
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("Only the PMO, team leads and department heads can create tasks");
+    }
+
+    [Fact]
+    public async Task When_the_PMO_allows_it_engineers_and_designers_can_create_but_only_for_themselves_and_unestimated()
+    {
+        await SeedEngineerAsync("allow_pmo@pulse.io", Roles.HeadOfPmo);
+        var engineer = await SeedEngineerAsync("allow_eng@pulse.io", Roles.Engineer);
+        var designer = await SeedEngineerAsync("allow_designer@pulse.io", Roles.Designer);
+        var someoneElse = await SeedEngineerAsync("allow_other@pulse.io", Roles.Engineer);
+        var project = await SeedProjectAsync("Engineers may create here");
+        await SeedProjectMemberAsync(project.Id, engineer.Id);
+        await SeedProjectMemberAsync(project.Id, designer.Id);
+        var pmo = await AuthenticatedClientAsync("allow_pmo@pulse.io");
+        var due = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)).ToString("yyyy-MM-dd");
+
+        try
+        {
+            (await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            foreach (var (email, person) in new[] { ("allow_eng@pulse.io", engineer), ("allow_designer@pulse.io", designer) })
+            {
+                var client = await AuthenticatedClientAsync(email);
+                var response = await client.PostAsJsonAsync("/api/v1/tasks", new
+                {
+                    title = $"Filed by {email}", points = 8, dueDate = due, projectId = project.Id, assigneeId = someoneElse.Id,
+                });
+
+                response.StatusCode.Should().Be(HttpStatusCode.Created, email);
+                var created = (await response.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
+                created.AssigneeId.Should().Be(person.Id, "an engineer who may create files the task for themselves");
+                created.Points.Should().Be(0, "their lead points it");
+            }
+        }
+        finally
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = false });
+        }
+    }
+
+    [Fact]
+    public async Task Allowing_engineers_to_create_does_not_open_it_to_other_roles_and_still_needs_project_access()
+    {
+        await SeedEngineerAsync("allow2_pmo@pulse.io", Roles.HeadOfPmo);
+        await SeedEngineerAsync("allow2_hr@pulse.io", Roles.HR);
+        await SeedEngineerAsync("allow2_eng@pulse.io", Roles.Engineer);
+        var team = await SeedTeamAsync("Allow2 team");
+        var project = await SeedProjectAsync("Allow2 project", team.Id);
+        var pmo = await AuthenticatedClientAsync("allow2_pmo@pulse.io");
+
+        try
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = true });
+
+            var hr = await AuthenticatedClientAsync("allow2_hr@pulse.io");
+            (await hr.PostAsJsonAsync("/api/v1/tasks", new { title = "HR on a project", projectId = project.Id })).StatusCode
+                .Should().Be(HttpStatusCode.Forbidden, "HR keeps personal to-dos only");
+
+            var eng = await AuthenticatedClientAsync("allow2_eng@pulse.io");
+            (await eng.PostAsJsonAsync("/api/v1/tasks", new { title = "Not my project", projectId = project.Id })).StatusCode
+                .Should().Be(HttpStatusCode.Forbidden, "an engineer still has to be able to open the project");
+        }
+        finally
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = false });
+        }
+    }
+
+    [Fact]
+    public async Task Only_the_head_of_PMO_can_change_who_may_create_tasks_and_everyone_can_read_it()
+    {
+        await SeedEngineerAsync("allow3_eng@pulse.io", Roles.Engineer);
+        await SeedEngineerAsync("allow3_pmo@pulse.io", Roles.HeadOfPmo);
+        var eng = await AuthenticatedClientAsync("allow3_eng@pulse.io");
+        var pmo = await AuthenticatedClientAsync("allow3_pmo@pulse.io");
+
+        (await eng.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = true })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        try
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = true });
+            var meta = (await (await eng.GetAsync("/api/v1/meta")).Content.ReadFromJsonAsync<ApiResponse<Pulse.Application.Meta.AppMetaDto>>(JsonOpts))!.Data!;
+            meta.EngineersCanCreateTasks.Should().BeTrue("so the screens can offer New task");
+        }
+        finally
+        {
+            await pmo.PatchAsJsonAsync("/api/v1/thresholds", new { engineersCanCreateTasks = false });
+        }
+    }
+
+    [Theory]
+    [InlineData(Roles.ProjectManager)]
+    [InlineData(Roles.ProductManager)]
+    [InlineData(Roles.HeadOfProduct)]
+    [InlineData(Roles.HeadOfPmo)]
+    public async Task CreateTask_is_allowed_for_the_pmo_and_the_product_roles_on_any_project(string role)
+    {
+        await SeedEngineerAsync($"task_creator_ok_{role}@pulse.io", role);
+        var project = await SeedProjectAsync($"Any project {role}");
+        var client = await AuthenticatedClientAsync($"task_creator_ok_{role}@pulse.io");
+
+        var response = await client.PostAsJsonAsync("/api/v1/tasks", new { title = "Planned work", projectId = project.Id });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task A_team_lead_cannot_create_a_task_on_another_teams_project()
+    {
+        var lead = await SeedEngineerAsync("task_lead_other@pulse.io", Roles.TeamLead);
+        var ownTeam = await SeedTeamAsync("Task lead own team", lead.Id);
+        await AssignEngineerToTeamAsync(lead.Id, ownTeam.Id);
+        var otherTeam = await SeedTeamAsync("Task lead other team");
+        var project = await SeedProjectAsync("Someone else's project", otherTeam.Id);
+        var client = await AuthenticatedClientAsync("task_lead_other@pulse.io");
+
+        var response = await client.PostAsJsonAsync("/api/v1/tasks", new { title = "Not mine to plan", projectId = project.Id });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

@@ -47,7 +47,7 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
         await SeedProjectMemberAsync(project.Id, backendDev.Id);
         var backendClient = await AuthenticatedClientAsync("handoff_backend@pulse.io");
 
-        var created = await backendClient.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Two-stage feature",
             points = 5,
@@ -56,8 +56,6 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
             assigneeId = backendDev.Id,
             requiresFrontendHandoff = true,
         });
-        created.StatusCode.Should().Be(HttpStatusCode.Created);
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
         task.RequiresFrontendHandoff.Should().BeTrue();
         task.CurrentStage.Should().Be("backend");
 
@@ -87,7 +85,7 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
         await SeedProjectMemberAsync(project.Id, backendDev.Id);
         var client = await AuthenticatedClientAsync("handoff_reject_backend@pulse.io");
 
-        var created = await client.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Two-stage feature",
             points = 5,
@@ -96,7 +94,6 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
             assigneeId = backendDev.Id,
             requiresFrontendHandoff = true,
         });
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
 
         var handOffResp = await client.PostAsJsonAsync(
             $"/api/v1/tasks/{task.Id}/hand-off-to-frontend", new { frontendAssigneeId = otherBackendDev.Id });
@@ -113,7 +110,7 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
         await SeedProjectMemberAsync(project.Id, backendDev.Id);
         var client = await AuthenticatedClientAsync("handoff_unflagged_backend@pulse.io");
 
-        var created = await client.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Single-stage feature",
             points = 5,
@@ -121,7 +118,6 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
             projectId = project.Id,
             assigneeId = backendDev.Id,
         });
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
         task.RequiresFrontendHandoff.Should().BeFalse();
 
         var handOffResp = await client.PostAsJsonAsync(
@@ -140,7 +136,7 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
         await SeedProjectMemberAsync(project.Id, backendDev.Id);
         var backendClient = await AuthenticatedClientAsync("handoff_reverse_backend@pulse.io");
 
-        var created = await backendClient.PostAsJsonAsync("/api/v1/tasks", new
+        var task = await CreateTaskViaApiAsync(new
         {
             title = "Two-stage feature",
             points = 5,
@@ -149,7 +145,6 @@ public class HandOffToFrontendTests : IntegrationTestBase, IClassFixture<PulseWe
             assigneeId = backendDev.Id,
             requiresFrontendHandoff = true,
         });
-        var task = (await created.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts))!.Data!;
 
         (await backendClient.PostAsJsonAsync($"/api/v1/tasks/{task.Id}/hand-off-to-frontend",
             new { frontendAssigneeId = frontendDev.Id })).StatusCode.Should().Be(HttpStatusCode.OK);
