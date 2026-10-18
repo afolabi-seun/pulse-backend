@@ -72,6 +72,10 @@ public class OverworkThresholds
         return at < start ? start : at;
     }
 
+    // When on, an engineer's workload counts the points still to do on each task (its points less what it has earned) instead of its full points, so
+    // a task that is mostly done weighs less. Off until the PMO turns it on: it changes the workload and overwork figures. See WorkloadPoints.
+    public bool UseProgressInWorkload { get; set; }
+
     // QA hand-off — business days given to review, starting the day a task is sent to QA
     // (see BusinessDays.Add; independent of the original task's own due date)
     public int QaLeadTimeDays { get; set; } = 2;
@@ -137,6 +141,8 @@ public class OverworkThresholds
             EscalationT3MinHours = t3MinH;
         if (settings.TryGetValue("EscalationT1MinHours", out var v10) && double.TryParse(v10, out var t1MinH))
             EscalationT1MinHours = t1MinH;
+        if (settings.TryGetValue("UseProgressInWorkload", out var vProg) && bool.TryParse(vProg, out var useProgress))
+            UseProgressInWorkload = useProgress;
         if (settings.TryGetValue("ReportingBaseline", out var vBase) && DateOnly.TryParse(vBase, out var baseline))
             ReportingBaseline = baseline;
         if (settings.TryGetValue("QaLeadTimeDays", out var v11) && int.TryParse(v11, out var qaLead))

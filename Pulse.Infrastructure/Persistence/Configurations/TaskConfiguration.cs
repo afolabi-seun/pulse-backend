@@ -69,6 +69,8 @@ public class TaskConfiguration : IEntityTypeConfiguration<PulseTask>
             .HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.PausedAt).HasColumnName("paused_at");
         builder.Property(t => t.PauseRemindedAt).HasColumnName("pause_reminded_at");
+        builder.Property(t => t.ProgressPercent).HasColumnName("progress_percent").IsRequired().HasDefaultValue(0);
+        builder.Property(t => t.EarnedPoints).HasColumnName("earned_points").HasPrecision(10, 3).IsRequired().HasDefaultValue(0m);
         builder.Property(t => t.LoanedFromEngineerId).HasColumnName("loaned_from_engineer_id");
         builder.Property(t => t.ActivatedAt).HasColumnName("activated_at").IsRequired();
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();

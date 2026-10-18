@@ -42,7 +42,11 @@ public class GetEngineerThroughputHandler : IRequestHandler<GetEngineerThroughpu
         }
 
         var points = await _tasks.GetWeeklyThroughputByAssigneeAsync(query.EngineerId, ct);
-        var result = points.Select(p => new ThroughputWeekDto(p.WeekOf, p.PointsDelivered)).ToList();
+        var earned = (await _tasks.GetWeeklyEarnedByAssigneeAsync(query.EngineerId, ct)).ToDictionary(e => e.WeekOf, e => e.PointsEarned);
+        // A week with only earned points (work moved but nothing finished) is still a week worth showing.
+        var weeks = points.Select(p => p.WeekOf).Union(earned.Keys).OrderBy(w => w);
+        var delivered = points.ToDictionary(p => p.WeekOf, p => p.PointsDelivered);
+        var result = weeks.Select(w => new ThroughputWeekDto(w, delivered.GetValueOrDefault(w), earned.GetValueOrDefault(w))).ToList();
 
         return ServiceResult<IReadOnlyList<ThroughputWeekDto>>.Ok(result);
     }

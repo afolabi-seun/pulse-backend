@@ -15,6 +15,12 @@ public class GetTeamThroughputQueryTests
     private readonly Mock<ITaskRepository> _tasks = new();
     private readonly Mock<IProjectAccessPolicy> _access = new();
 
+    public GetTeamThroughputQueryTests()
+    {
+        // No progress has been earned unless a test says so.
+        _tasks.Setup(t => t.GetWeeklyEarnedByTeamAsync(It.IsAny<Guid>(), default)).ReturnsAsync([]);
+    }
+
     private GetTeamThroughputHandler CreateHandler() =>
         new(_teams.Object, _tasks.Object, _access.Object);
 

@@ -67,7 +67,7 @@ public class EngineerWorkloadAssessor
 
             var (_, isOverworked) = _calculator.Compute(engineer, work, activeOverride, departmentOverride);
             result[engineer.Id] = new EngineerWorkload(
-                work.Count, work.Sum(t => t.Points), OverworkSignalsCalculator.CyclePoints(engineer, work), isOverworked);
+                work.Count, WorkloadPoints.Sum(work, _calculator.UseProgress), OverworkSignalsCalculator.CyclePoints(engineer, work, _calculator.UseProgress), isOverworked);
         }
         return result;
     }

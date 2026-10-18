@@ -82,6 +82,24 @@ public class OrganizationRlsTests : IntegrationTestBase, IClassFixture<PulseWebA
     }
 
     [Fact]
+    public async Task Progress_credits_stay_inside_their_organization()
+    {
+        var world = await SeedAsync();
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PulseDbContext>();
+            db.TaskProgressCredits.Add(Pulse.Domain.Tasks.TaskProgressCredit.Create(world.TaskId, world.EngineerId, 1.5m, 25));
+            await db.SaveChangesAsync();
+        }
+        var where = $"task_id = '{world.TaskId}'";
+
+        (await CountAsync("task_progress_credits", where, Roles.HeadOfPmo, world.OrgBUserId, world.OrgBId))
+            .Should().Be(0, "org B's head of PMO must not see org A's earned points");
+        (await CountAsync("task_progress_credits", where, Roles.HeadOfPmo, world.OrgAUserId, Organization.DefaultId))
+            .Should().Be(1, "control: org A's head of PMO sees its own");
+    }
+
+    [Fact]
     public async Task An_authenticated_caller_without_an_organization_sees_nothing()
     {
         var world = await SeedAsync();

@@ -71,14 +71,16 @@ public partial class PulseDbContext
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        RecordProgressCreditsAsync(CancellationToken.None).GetAwaiter().GetResult();
         StampOrganizationOnNewRows();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        await RecordProgressCreditsAsync(cancellationToken);
         StampOrganizationOnNewRows();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
     /// <summary>
@@ -147,6 +149,7 @@ public partial class PulseDbContext
         b.Entity<TaskHistory>().HasQueryFilter(h => CurrentOrganizationId == null || Tasks.Any(t => t.Id == h.TaskId));
         b.Entity<Subtask>().HasQueryFilter(s => CurrentOrganizationId == null || Tasks.Any(t => t.Id == s.TaskId));
         b.Entity<TaskDependency>().HasQueryFilter(d => CurrentOrganizationId == null || Tasks.Any(t => t.Id == d.DependentTaskId));
+        b.Entity<TaskProgressCredit>().HasQueryFilter(c => CurrentOrganizationId == null || Tasks.Any(t => t.Id == c.TaskId));
         b.Entity<TaskEstimationSession>().HasQueryFilter(s => CurrentOrganizationId == null || Tasks.Any(t => t.Id == s.TaskId));
         b.Entity<TaskEstimationVote>().HasQueryFilter(v => CurrentOrganizationId == null || Tasks.Any(t => t.Id == v.TaskId));
         b.Entity<EscalationEvent>().HasQueryFilter(e => CurrentOrganizationId == null || Tasks.Any(t => t.Id == e.TaskId));

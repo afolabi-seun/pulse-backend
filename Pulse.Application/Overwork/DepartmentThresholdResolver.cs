@@ -25,6 +25,7 @@ public static class DepartmentThresholdResolver
             QaLeadTimeDays         = global.QaLeadTimeDays,
             PointScale             = global.PointScale,
             PriorityScale          = global.PriorityScale,
+            UseProgressInWorkload  = global.UseProgressInWorkload,
         };
     }
 }
