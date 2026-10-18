@@ -26,6 +26,9 @@ public class EscalationEventRepository : IEscalationEventRepository
             .ExecuteDeleteAsync(ct);
     }
 
+    public async Task<IReadOnlyList<EscalationEvent>> ListFiredSinceAsync(DateTime since, CancellationToken ct = default) =>
+        await _db.EscalationEvents.Where(e => e.FiredAt > since).OrderBy(e => e.FiredAt).ToListAsync(ct);
+
     public async Task<DateTime?> GetLastFiredAtAsync(CancellationToken ct = default) =>
         await _db.EscalationEvents.MaxAsync(e => (DateTime?)e.FiredAt, ct);
 

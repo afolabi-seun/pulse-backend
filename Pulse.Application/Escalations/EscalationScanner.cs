@@ -18,7 +18,7 @@ public class EscalationScanner : IRecurringJob
     private readonly ITeamRepository _teams;
     private readonly INotificationDispatcher _notify;
     private readonly OverworkThresholds _thresholds;
-    private readonly IProjectAccessPolicy _access;
+    private readonly TimeProvider _clock;
 
     public EscalationScanner(
         ITaskRepository tasks,
@@ -27,7 +27,7 @@ public class EscalationScanner : IRecurringJob
         ITeamRepository teams,
         INotificationDispatcher notify,
         OverworkThresholds thresholds,
-        IProjectAccessPolicy access)
+        TimeProvider? clock = null)
     {
         _tasks = tasks;
         _events = events;
@@ -35,15 +35,16 @@ public class EscalationScanner : IRecurringJob
         _teams = teams;
         _notify = notify;
         _thresholds = thresholds;
-        _access = access;
+        // The real clock unless a test supplies its own: what the scanner says depends on the time of day and the weekday.
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task RunAsync(CancellationToken ct = default)
     {
         var daysLookahead = (int)Math.Ceiling(_thresholds.EscalationT3Days);
         var candidates = await _tasks.GetEscalationCandidatesAsync(daysLookahead, ct);
-        var isWeekend = DateTime.UtcNow.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-        var now = DateTime.UtcNow;
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var isWeekend = now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
         // Personal tasks (an HR/Accountant's own to-dos) are reminded about too, but only to their owner:
         // no team-lead copy, no PM/head overdue broadcast. They come from a separate query so the shared
@@ -73,17 +74,19 @@ public class EscalationScanner : IRecurringJob
         var payload = JsonSerializer.Serialize(new { taskId = task.Id, taskTitle = task.Title, dueDate = task.DueDate });
 
         if (level == EscalationLevel.TMinus3)
-            await FireT3Async(task.Id, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, ownerOnly, ct);
+            await FireT3Async(task.Id, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, ownerOnly, now, ct);
         else if (level == EscalationLevel.TMinus1)
-            await FireT1Async(task.Id, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, ownerOnly, ct);
+            await FireT1Async(task.Id, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, ownerOnly, now, ct);
         else
-            await FireOverdueAsync(task.Id, task.ProjectId, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, task.ParentTaskId.HasValue, ownerOnly, ct);
+            await FireOverdueAsync(task.Id, task.ProjectId, task.Title, task.DueDate!.Value, task.AssigneeId, payload, isWeekend, task.ParentTaskId.HasValue, ownerOnly, now, ct);
     }
 
     private async Task FireT3Async(Guid taskId, string title, DateOnly dueDate,
-        Guid? assigneeId, string payload, bool isWeekend, bool ownerOnly, CancellationToken ct)
+        Guid? assigneeId, string payload, bool isWeekend, bool ownerOnly, DateTime now, CancellationToken ct)
     {
         if (assigneeId is null) return;
+        // This stage is named "3 days" but also fires on a share of the task's lifetime, so say how far away the due date really is.
+        var when = DueDateWording.When(dueDate, now);
 
         var engineer = await _engineers.GetByIdAsync(assigneeId.Value, ct);
         if (engineer is null) return;
@@ -94,10 +97,10 @@ public class EscalationScanner : IRecurringJob
         {
             var engineerBody = $"""
                 <p>Hi {engineer.Name},</p>
-                <p>Your task <strong>{title}</strong> is due on <strong>{dueDate:D}</strong> — 3 days from now.</p>
+                <p>Your task <strong>{title}</strong> is due <strong>{when}</strong> ({dueDate:D}).</p>
                 <p>Please ensure you're on track to complete it by the due date.</p>
                 """;
-            await _notify.EmailAsync(engineer.Id, NotificationKind.EscalationT3, new NotificationEmail(engineer.Email, $"Task due in 3 days: {title}", EmailTemplate.Layout(engineerBody)), ct);
+            await _notify.EmailAsync(engineer.Id, NotificationKind.EscalationT3, new NotificationEmail(engineer.Email, $"Task due {when}: {title}", EmailTemplate.Layout(engineerBody)), ct);
 
             var teamLead = ownerOnly ? null : await GetTeamLeadAsync(engineer, ct);
             if (teamLead is not null && teamLead.Id != engineer.Id)
@@ -106,18 +109,20 @@ public class EscalationScanner : IRecurringJob
 
                 var leadBody = $"""
                     <p>Hi {teamLead.Name},</p>
-                    <p><strong>{engineer.Name}</strong>'s task <strong>{title}</strong> is due on <strong>{dueDate:D}</strong> — 3 days from now.</p>
+                    <p><strong>{engineer.Name}</strong>'s task <strong>{title}</strong> is due <strong>{when}</strong> ({dueDate:D}).</p>
                     <p>Please check in with them to ensure they're on track.</p>
                     """;
-                await _notify.EmailAsync(teamLead.Id, NotificationKind.EscalationT3, new NotificationEmail(teamLead.Email, $"Team task due in 3 days: {title}", EmailTemplate.Layout(leadBody)), ct);
+                await _notify.EmailAsync(teamLead.Id, NotificationKind.EscalationT3, new NotificationEmail(teamLead.Email, $"Team task due {when}: {title}", EmailTemplate.Layout(leadBody)), ct);
             }
         }
     }
 
     private async Task FireT1Async(Guid taskId, string title, DateOnly dueDate,
-        Guid? assigneeId, string payload, bool isWeekend, bool ownerOnly, CancellationToken ct)
+        Guid? assigneeId, string payload, bool isWeekend, bool ownerOnly, DateTime now, CancellationToken ct)
     {
         if (assigneeId is null) return;
+        // This stage is named "1 day" but can fire on the due day itself, so say how far away the due date really is.
+        var when = DueDateWording.When(dueDate, now);
 
         var engineer = await _engineers.GetByIdAsync(assigneeId.Value, ct);
         if (engineer is null) return;
@@ -128,10 +133,10 @@ public class EscalationScanner : IRecurringJob
         {
             var engineerBody = $"""
                 <p>Hi {engineer.Name},</p>
-                <p>Your task <strong>{title}</strong> is due tomorrow (<strong>{dueDate:D}</strong>).</p>
+                <p>Your task <strong>{title}</strong> is due <strong>{when}</strong> ({dueDate:D}).</p>
                 <p>Please confirm you're on track, or flag a blocker in Pulse if you need help.</p>
                 """;
-            await _notify.EmailAsync(engineer.Id, NotificationKind.EscalationT1, new NotificationEmail(engineer.Email, $"Task due tomorrow: {title}", EmailTemplate.Layout(engineerBody)), ct);
+            await _notify.EmailAsync(engineer.Id, NotificationKind.EscalationT1, new NotificationEmail(engineer.Email, $"Task due {when}: {title}", EmailTemplate.Layout(engineerBody)), ct);
 
             var teamLead = ownerOnly ? null : await GetTeamLeadAsync(engineer, ct);
             if (teamLead is not null && teamLead.Id != engineer.Id)
@@ -140,10 +145,10 @@ public class EscalationScanner : IRecurringJob
 
                 var leadBody = $"""
                     <p>Hi {teamLead.Name},</p>
-                    <p><strong>{engineer.Name}</strong>'s task <strong>{title}</strong> is due tomorrow (<strong>{dueDate:D}</strong>).</p>
+                    <p><strong>{engineer.Name}</strong>'s task <strong>{title}</strong> is due <strong>{when}</strong> ({dueDate:D}).</p>
                     <p>Please follow up with them immediately.</p>
                     """;
-                await _notify.EmailAsync(teamLead.Id, NotificationKind.EscalationT1, new NotificationEmail(teamLead.Email, $"Team task due tomorrow: {title}", EmailTemplate.Layout(leadBody)), ct);
+                await _notify.EmailAsync(teamLead.Id, NotificationKind.EscalationT1, new NotificationEmail(teamLead.Email, $"Team task due {when}: {title}", EmailTemplate.Layout(leadBody)), ct);
             }
         }
     }
@@ -157,8 +162,9 @@ public class EscalationScanner : IRecurringJob
     }
 
     private async Task FireOverdueAsync(Guid taskId, Guid projectId, string title, DateOnly dueDate,
-        Guid? assigneeId, string payload, bool isWeekend, bool isQaTask, bool ownerOnly, CancellationToken ct)
+        Guid? assigneeId, string payload, bool isWeekend, bool isQaTask, bool ownerOnly, DateTime now, CancellationToken ct)
     {
+        var ago = DueDateWording.OverdueSuffix(dueDate, now);
         Engineer? assignee = assigneeId.HasValue
             ? await _engineers.GetByIdAsync(assigneeId.Value, ct)
             : null;
@@ -173,7 +179,7 @@ public class EscalationScanner : IRecurringJob
             {
                 var assigneeBody = $"""
                     <p>Hi {assignee.Name},</p>
-                    <p>Your task <strong>{title}</strong> was due on <strong>{dueDate:D}</strong> and is now overdue.</p>
+                    <p>Your task <strong>{title}</strong> was due on <strong>{dueDate:D}</strong>{ago} and is now overdue.</p>
                     <p>Please update the status or flag a blocker in Pulse immediately.</p>
                     """;
                 await _notify.EmailAsync(assignee.Id, NotificationKind.EscalationOverdue, new NotificationEmail(assignee.Email, $"Overdue task: {title}", EmailTemplate.Layout(assigneeBody)), ct);
@@ -202,22 +208,15 @@ public class EscalationScanner : IRecurringJob
         }
         else
         {
-            // Notify PMs and department heads — but only ones who could actually open this task.
-            // Every PM passes (org-wide access), but a department head outside this project's own
-            // department otherwise got the same "overdue" ping as everyone else and just hit a
-            // 403 trying to look at it — noise with no action attached.
-            var headEngineers = new List<Engineer>();
-            foreach (var headRole in Roles.HeadRoles)
-                headEngineers.AddRange(await _engineers.ListByRoleAsync(headRole, ct));
-            var candidateManagers = (await _engineers.ListByRoleAsync(Roles.ProjectManager, ct))
-                .Concat(headEngineers)
-                .ToList();
-
-            // Sequential — DbContext is not thread-safe.
-            managers = new List<Engineer>();
-            foreach (var candidate in candidateManagers)
-                if (await _access.CanAccessProjectAsync(projectId, candidate.Id, candidate.Role, ct))
-                    managers.Add(candidate);
+            // The team lead is told straight away. Department heads and the PMO are not alerted per task: they get one digest each weekday morning
+            // (see EscalationDigestJob), so an overdue task reaches them without a message for every task.
+            managers = [];
+            if (assignee is not null)
+            {
+                var teamLead = await GetTeamLeadAsync(assignee, ct);
+                if (teamLead is not null && teamLead.Id != assignee.Id)
+                    managers.Add(teamLead);
+            }
         }
 
         foreach (var manager in managers)
@@ -228,7 +227,7 @@ public class EscalationScanner : IRecurringJob
             {
                 var managerBody = $"""
                     <p>Hi {manager.Name},</p>
-                    <p>Task <strong>{title}</strong> (assigned to <strong>{assigneeLabel}</strong>) was due on <strong>{dueDate:D}</strong> and is now overdue.</p>
+                    <p>Task <strong>{title}</strong> (assigned to <strong>{assigneeLabel}</strong>) was due on <strong>{dueDate:D}</strong>{ago} and is now overdue.</p>
                     <p>Please review this task in Pulse and take appropriate action.</p>
                     """;
                 await _notify.EmailAsync(manager.Id, NotificationKind.EscalationOverdue, new NotificationEmail(manager.Email, $"Overdue task alert: {title}", EmailTemplate.Layout(managerBody)), ct);

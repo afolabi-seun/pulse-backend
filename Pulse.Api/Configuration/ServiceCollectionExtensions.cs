@@ -222,6 +222,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<WeeklyVitalsPromptJob>();
         services.AddScoped<SendEmailJob>();
         services.AddScoped<OverworkDigestJob>();
+        services.AddScoped<EscalationDigestJob>();
         // Thresholds are per organization: a singleton cache, resolved per request for the caller's org.
         services.AddSingleton<OrganizationThresholdsCache>();
         services.AddScoped<OrganizationThresholdsProvider>();
