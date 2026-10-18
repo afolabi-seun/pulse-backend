@@ -11,6 +11,9 @@ public static class NotificationKind
     /// <summary>One daily alert to a department head or the PMO listing the tasks that reached their stage since the last digest, instead of one alert per
     /// task. See EscalationDigestJob.</summary>
     public const string EscalationDigest  = "escalation_digest";
+    /// <summary>One alert to a task's team lead, department heads and the PMO listing tasks that have sat paused for a week or more, so
+    /// somebody decides to resume or reassign them. See PausedTaskReminderJob.</summary>
+    public const string PausedTaskReminder = "paused_task_reminder";
     public const string BlockerFlagged    = "blocker_flagged";
     public const string WeeklyVitalsPrompt  = "weekly_vitals_prompt";
     public const string WeeklyReportReady  = "weekly_report_ready";

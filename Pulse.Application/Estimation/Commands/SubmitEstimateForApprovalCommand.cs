@@ -21,6 +21,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
+    private readonly IProjectRepository _projects;
     private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
@@ -29,6 +30,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
         ITaskRepository tasks,
         IEngineerRepository engineers,
         ITeamRepository teams,
+        IProjectRepository projects,
         IAppSettings settings,
         INotificationDispatcher notify)
     {
@@ -36,6 +38,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
+        _projects = projects;
         _notify = notify;
         _settings = settings;
     }
@@ -82,23 +85,23 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
 
     private async Task NotifyApproversAsync(Domain.Tasks.PulseTask task, SubmitEstimateForApprovalCommand request, CancellationToken ct)
     {
-        // A fresh submission is never pre-escalated (SubmitForApproval resets the flag) — always
-        // resolves to whoever the first tier actually is (Team Lead, or straight to the head(s)
-        // per EstimationApproval's own rules).
-        var state = await EstimationApproval.ResolveApproversAsync(task.AssigneeId, escalatedToHead: false, request.ActorId, _engineers, _teams, ct);
-        // No one resolvable at all (no assignee, or assignee has neither a Team Lead nor a
-        // department head) — ApproveEstimateCommand falls back to allowing Team Lead+ in that
-        // case, so there's no one specific to notify here beyond what the existing task-update
-        // realtime push already covers.
-        if (state is null || state.Approvers.Count == 0) return;
+        // A fresh submission is never pre-escalated — it goes to whoever the first tier actually is: the owning team's lead, or straight to the
+        // department head(s) or PMO when there is no lead to ask (or the assignee is the lead).
+        var state = await EstimationApproval.ResolveApproversAsync(task.ProjectId, task.AssigneeId, ApprovalStage.TeamLead, request.ActorId, _projects, _engineers, _teams, ct);
+        // Nobody resolvable at all — ApproveEstimateCommand falls back to allowing Team Lead+ in that case, so there's no one specific to notify here.
+        if (state.Approvers.Count == 0) return;
 
         var submitter = await _engineers.GetByIdAsync(request.ActorId, ct);
         var assignee = task.AssigneeId.HasValue ? await _engineers.GetByIdAsync(task.AssigneeId.Value, ct) : null;
         var taskLink = $"{_settings.AppBaseUrl}/tasks/{task.Id}";
-        var roleLabel = state.Stage == ApprovalStage.TeamLead ? "as their team lead" : "as their department head";
-
         foreach (var approver in state.Approvers)
         {
+            var roleLabel = approver.Role switch
+            {
+                Domain.Engineers.Roles.HeadOfPmo or Domain.Engineers.Roles.ProjectManager => "part of the PMO",
+                _ when Domain.Engineers.Roles.HeadRoles.Contains(approver.Role) => "the head of the department that owns this task",
+                _ => "the lead of the team that owns this task",
+            };
             var payload = JsonSerializer.Serialize(new
             {
                 taskId = task.Id,
@@ -116,7 +119,7 @@ public class SubmitEstimateForApprovalHandler : IRequestHandler<SubmitEstimateFo
                 <strong>{request.Points} pts</strong> for <strong>{task.Title}</strong>
                 (assigned to {assignee?.Name ?? "an engineer"}) and it needs your approval.</p>
                 {EmailTemplate.Button(taskLink, "Review estimate")}
-                {EmailTemplate.Muted($"This notification was sent because you are {roleLabel} for this task's assignee.")}
+                {EmailTemplate.Muted($"This notification was sent because you are {roleLabel}.")}
                 """;
             await _notify.EmailAsync(approver.Id, NotificationKind.EstimateApprovalRequested, new NotificationEmail(approver.Email, $"Estimate approval needed: {task.Title}", EmailTemplate.Layout(body)), ct);
         }

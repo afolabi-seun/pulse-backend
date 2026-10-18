@@ -3,6 +3,7 @@ using Pulse.Application.Automations;
 using Pulse.Application.CheckIns;
 using Pulse.Application.Escalations;
 using Pulse.Application.Estimation;
+using Pulse.Application.Tasks;
 using Pulse.Application.Overwork;
 using Pulse.Application.Vitals;
 using Pulse.Application.TimeEntries;
@@ -64,6 +65,12 @@ public static class HangfireJobRegistrar
         // 09:00 weekdays — one digest per department head / PMO member of the tasks that reached their due-date stage since the last one
         manager.AddOrUpdate<OrganizationJobRunner<EscalationDigestJob>>(
             "escalation-digest",
+            r => r.RunForAllOrganizationsAsync(CancellationToken.None),
+            "0 9 * * 1-5");
+
+        // 09:00 weekdays — tasks paused for a week or more are raised with the team lead, department heads and PMO to resume or reassign
+        manager.AddOrUpdate<OrganizationJobRunner<PausedTaskReminderJob>>(
+            "paused-task-reminder",
             r => r.RunForAllOrganizationsAsync(CancellationToken.None),
             "0 9 * * 1-5");
 

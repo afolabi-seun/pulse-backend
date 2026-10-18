@@ -13,9 +13,9 @@ public class EstimationRepository : IEstimationRepository
     public async Task<TaskEstimationSession?> GetSessionAsync(Guid taskId, CancellationToken ct = default) =>
         await _db.EstimationSessions.FirstOrDefaultAsync(s => s.TaskId == taskId, ct);
 
-    public async Task<IReadOnlyList<TaskEstimationSession>> GetPendingApprovalsOlderThanAsync(DateTime cutoff, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<TaskEstimationSession>> ListPendingApprovalsAsync(CancellationToken ct = default) =>
         await _db.EstimationSessions
-            .Where(s => s.PendingApprovalPoints != null && !s.EscalatedToHead && s.SubmittedAt <= cutoff)
+            .Where(s => s.PendingApprovalPoints != null && !s.EscalatedToPmo && s.SubmittedAt != null)
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<TaskEstimationVote>> GetVotesAsync(Guid taskId, CancellationToken ct = default) =>

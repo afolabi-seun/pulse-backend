@@ -90,6 +90,9 @@ public class PulseTask : Entity
     public bool IsArchived => ArchivedAt.HasValue;
     public TaskStatus? StatusBeforePause { get; private set; }
     public DateTime? PausedAt { get; private set; }
+    /// <summary>When the team lead, department heads and PMO were last reminded that this task has sat paused too long — see PausedTaskReminderJob.
+    /// Cleared whenever the task is paused or resumed, so each pause is reminded about on its own.</summary>
+    public DateTime? PauseRemindedAt { get; private set; }
     public Guid? LoanedFromEngineerId { get; private set; }
     /// <summary>Sequential, per-project display number — combined with the owning project's Code
     /// (e.g. "NOTIF") to form this task's display key, "NOTIF-011". 0 is a transient "not yet
@@ -587,14 +590,15 @@ public class PulseTask : Entity
         _history.Add(TaskHistory.Record(Id, "status", TaskStatus.Blocked.ToString(), TaskStatus.Active.ToString(), actorId));
     }
 
-    public void Pause(string? note, Guid actorId, bool byProject = false)
+    public void Pause(string? note, Guid actorId, bool byProject = false, DateTime? at = null)
     {
         if (Status != TaskStatus.Active && Status != TaskStatus.Blocked)
             throw new DomainException("Only an active or blocked task can be paused.");
 
         var old = Status;
         StatusBeforePause = old;
-        PausedAt = DateTime.UtcNow;
+        PausedAt = at ?? DateTime.UtcNow;
+        PauseRemindedAt = null;
         PausedByProject = byProject;
         Status = TaskStatus.Paused;
         PauseNote = note;
@@ -642,10 +646,13 @@ public class PulseTask : Entity
         PauseNote = null;
         StatusBeforePause = null;
         PausedAt = null;
+        PauseRemindedAt = null;
         PausedByProject = false;
         if (restoreTo == TaskStatus.Active)
             ActivatedAt = DateTime.UtcNow;
     }
+
+    public void MarkPauseReminded(DateTime at) => PauseRemindedAt = at;
 
     public void SetType(TaskType type, Guid actorId)
     {

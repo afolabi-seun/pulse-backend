@@ -1582,6 +1582,10 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("pause_note");
 
+                    b.Property<DateTime?>("PauseRemindedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pause_reminded_at");
+
                     b.Property<DateTime?>("PausedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("paused_at");
@@ -1876,6 +1880,16 @@ namespace Pulse.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("escalated_to_head");
+
+                    b.Property<DateTime?>("EscalatedToHeadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_to_head_at");
+
+                    b.Property<bool>("EscalatedToPmo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("escalated_to_pmo");
 
                     b.Property<bool>("IsRevealed")
                         .HasColumnType("boolean")

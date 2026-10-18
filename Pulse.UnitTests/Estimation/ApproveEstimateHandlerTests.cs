@@ -16,6 +16,7 @@ public class ApproveEstimateHandlerTests
     private readonly Mock<ITaskRepository> _tasks = new();
     private readonly Mock<IEngineerRepository> _engineers = new();
     private readonly Mock<ITeamRepository> _teams = new();
+    private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<INotificationRepository> _notifications = new();
     private readonly Mock<IRealtimeNotifier> _realtime = new();
     private readonly Mock<IEmailQueue> _emailQueue = new();
@@ -26,10 +27,11 @@ public class ApproveEstimateHandlerTests
         _settings.Setup(s => s.AppBaseUrl).Returns("https://pulse.test");
         _teams.Setup(t => t.ListAllAsync(default)).ReturnsAsync([]);
         _engineers.Setup(e => e.ListActiveAsync(default)).ReturnsAsync([]);
+        _engineers.Setup(e => e.ListByRoleAsync(It.IsAny<string>(), default)).ReturnsAsync([]);
     }
 
     private ApproveEstimateHandler CreateHandler() => new(
-        _estimation.Object, _tasks.Object, _engineers.Object, _teams.Object,
+        _estimation.Object, _tasks.Object, _engineers.Object, _teams.Object, _projects.Object,
         _settings.Object, TestNotifications.Dispatcher(_notifications, _realtime, _emailQueue));
 
     private (Team team, Engineer assignee, Engineer head, PulseTask task, Guid submitterId) SetUpPendingEstimate(int points)

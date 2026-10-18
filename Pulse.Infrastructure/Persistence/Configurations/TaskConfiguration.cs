@@ -68,6 +68,7 @@ public class TaskConfiguration : IEntityTypeConfiguration<PulseTask>
         builder.Property(t => t.StatusBeforePause).HasColumnName("status_before_pause")
             .HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.PausedAt).HasColumnName("paused_at");
+        builder.Property(t => t.PauseRemindedAt).HasColumnName("pause_reminded_at");
         builder.Property(t => t.LoanedFromEngineerId).HasColumnName("loaned_from_engineer_id");
         builder.Property(t => t.ActivatedAt).HasColumnName("activated_at").IsRequired();
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();

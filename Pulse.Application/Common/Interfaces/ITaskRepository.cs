@@ -84,6 +84,9 @@ public interface ITaskRepository
     Task<IReadOnlyList<PulseTask>> GetHandedOffByAsync(Guid backendAssigneeId, CancellationToken ct = default);
     Task<IReadOnlyList<PulseTask>> GetAllActiveAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PulseTask>> GetBlockedTasksAsync(CancellationToken ct = default);
+    /// <summary>Tasks currently paused by their own assignee or lead — not by a project hold, and not in personal projects. The candidates for
+    /// PausedTaskReminderJob.</summary>
+    Task<IReadOnlyList<PulseTask>> GetPausedTasksAsync(CancellationToken ct = default);
     /// <summary>When each of these tasks most recently became Blocked (latest status -> Blocked history
     /// entry). A task with no such entry is simply absent — callers fall back to another timestamp.</summary>
     Task<IReadOnlyDictionary<Guid, DateTime>> GetBlockedSinceAsync(IReadOnlyList<Guid> taskIds, CancellationToken ct = default);

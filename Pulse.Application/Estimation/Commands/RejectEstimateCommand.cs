@@ -16,6 +16,7 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
     private readonly ITaskRepository _tasks;
     private readonly IEngineerRepository _engineers;
     private readonly ITeamRepository _teams;
+    private readonly IProjectRepository _projects;
     private readonly INotificationDispatcher _notify;
     private readonly IAppSettings _settings;
 
@@ -24,6 +25,7 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
         ITaskRepository tasks,
         IEngineerRepository engineers,
         ITeamRepository teams,
+        IProjectRepository projects,
         IAppSettings settings,
         INotificationDispatcher notify)
     {
@@ -31,6 +33,7 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
         _tasks = tasks;
         _engineers = engineers;
         _teams = teams;
+        _projects = projects;
         _notify = notify;
         _settings = settings;
     }
@@ -48,8 +51,8 @@ public class RejectEstimateHandler : IRequestHandler<RejectEstimateCommand, Serv
         if (request.ActorId == session.SubmittedBy)
             return ServiceResult<Unit>.Fail("FORBIDDEN", "You submitted this estimate, so someone else has to reject it.");
 
-        if (!await EstimationApproval.IsAuthorizedAsync(task.AssigneeId, request.ActorId, request.ActorRole, session.EscalatedToHead, session.SubmittedBy, _engineers, _teams, ct))
-            return ServiceResult<Unit>.Fail("FORBIDDEN", "Only the assignee's department head (or a Team Lead, if none is set up) can reject this estimate.");
+        if (!await EstimationApproval.IsAuthorizedAsync(task.ProjectId, task.AssigneeId, request.ActorId, request.ActorRole, EstimationApproval.ReachedBy(session), session.SubmittedBy, _projects, _engineers, _teams, ct))
+            return ServiceResult<Unit>.Fail("FORBIDDEN", "Only the approvers this request has reached can reject it: the owning team's lead, then the department head, then the PMO.");
 
         var submittedByBeforeClear = session.SubmittedBy;
 
