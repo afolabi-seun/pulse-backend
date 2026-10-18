@@ -6,6 +6,9 @@ namespace Pulse.Application.Common.Interfaces;
 /// <summary>Weekly throughput data point — delivered story points for a calendar week.</summary>
 public record WeeklyThroughputPoint(DateOnly WeekOf, int PointsDelivered);
 
+/// <summary>Points earned in a week: the sum of that week's progress credits, which can be fractions and can be negative when work was taken back.</summary>
+public record WeeklyEarnedPoint(DateOnly WeekOf, decimal PointsEarned);
+
 public interface IProjectRepository
 {
     Task<Project?> GetByIdAsync(Guid id, CancellationToken ct = default);

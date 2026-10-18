@@ -582,6 +582,40 @@ public class TaskRepository : ITaskRepository
             .ToList();
     }
 
+    public async Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByAssigneeAsync(Guid engineerId, CancellationToken ct = default)
+    {
+        var since = _thresholds.FloorTime(DateTime.UtcNow.AddDays(-42));
+        var credits = await _db.TaskProgressCredits
+            .Where(c => c.EngineerId == engineerId && c.CreditedAt >= since)
+            .Select(c => new { c.Points, c.CreditedAt })
+            .ToListAsync(ct);
+        return WeeklyEarned(credits.Select(c => (c.Points, c.CreditedAt)));
+    }
+
+    public async Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByTeamAsync(Guid teamId, CancellationToken ct = default)
+    {
+        var since = _thresholds.FloorTime(DateTime.UtcNow.AddDays(-42));
+        var teamEngineerIds = await _db.Engineers.Where(e => e.TeamId == teamId).Select(e => e.Id).ToListAsync(ct);
+        if (teamEngineerIds.Count == 0) return [];
+        var credits = await _db.TaskProgressCredits
+            .Where(c => c.EngineerId != null && teamEngineerIds.Contains(c.EngineerId.Value) && c.CreditedAt >= since)
+            .Select(c => new { c.Points, c.CreditedAt })
+            .ToListAsync(ct);
+        return WeeklyEarned(credits.Select(c => (c.Points, c.CreditedAt)));
+    }
+
+    // Weeks run Monday to Sunday, like the delivered series.
+    private static IReadOnlyList<WeeklyEarnedPoint> WeeklyEarned(IEnumerable<(decimal Points, DateTime At)> credits) =>
+        credits
+            .GroupBy(c =>
+            {
+                var dow = (int)c.At.DayOfWeek;
+                return DateOnly.FromDateTime(c.At.AddDays(dow == 0 ? -6 : 1 - dow));
+            })
+            .Select(g => new WeeklyEarnedPoint(g.Key, g.Sum(c => c.Points)))
+            .OrderBy(p => p.WeekOf)
+            .ToList();
+
     public async Task<IReadOnlyList<WeeklyThroughputPoint>> GetWeeklyThroughputByTeamAsync(Guid teamId, CancellationToken ct = default)
     {
         var teamEngineerIds = await _db.Engineers

@@ -90,6 +90,12 @@ public class PulseTask : Entity
     public bool IsArchived => ArchivedAt.HasValue;
     public TaskStatus? StatusBeforePause { get; private set; }
     public DateTime? PausedAt { get; private set; }
+    /// <summary>How far along the engineer or lead says this task is, in steps of 25 (0, 25, 50, 75). Only used while the task has no checklist; with one,
+    /// the checklist sets progress. 100 is never set by hand — see <see cref="TaskProgress"/>.</summary>
+    public int ProgressPercent { get; private set; }
+    /// <summary>Points this task has earned so far: its points times its effective progress. Kept in step with the credit entries by the data layer
+    /// whenever the task is saved, so there is never a gap between this and the sum of its credits.</summary>
+    public decimal EarnedPoints { get; private set; }
     /// <summary>When the team lead, department heads and PMO were last reminded that this task has sat paused too long — see PausedTaskReminderJob.
     /// Cleared whenever the task is paused or resumed, so each pause is reminded about on its own.</summary>
     public DateTime? PauseRemindedAt { get; private set; }
@@ -654,7 +660,27 @@ public class PulseTask : Entity
             ActivatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Who earned points on this task are credited to: the same engineer a finished task is credited to.</summary>
+    public Guid? CreditedEngineer => LoanedFromEngineerId ?? BackendAssigneeId ?? AssigneeId;
+
     public void MarkPauseReminded(DateTime at) => PauseRemindedAt = at;
+
+    /// <summary>The engineer or lead moves the task's progress. Allowed on work in flight (Active or Blocked); a task with a checklist is as far along as its
+    /// checklist, so it is set there instead.</summary>
+    public void SetProgress(int percent, Guid actorId)
+    {
+        if (Status is not (TaskStatus.Active or TaskStatus.Blocked))
+            throw new DomainException("Progress can only be set on a task that is being worked on.");
+        if (!TaskProgress.ManualSteps.Contains(percent))
+            throw new DomainException($"Progress must be one of {string.Join(", ", TaskProgress.ManualSteps)} percent; 100 is reached by finishing the task.");
+        if (ProgressPercent == percent) return;
+
+        _history.Add(TaskHistory.Record(Id, "progress", ProgressPercent.ToString(), percent.ToString(), actorId));
+        ProgressPercent = percent;
+    }
+
+    /// <summary>Called only by the data layer when it records a credit, to keep <see cref="EarnedPoints"/> equal to the sum of the task's credits.</summary>
+    public void SetEarnedPoints(decimal earned) => EarnedPoints = earned;
 
     public void SetType(TaskType type, Guid actorId)
     {
@@ -711,6 +737,7 @@ public class PulseTask : Entity
         AssigneeId = null;
         DueDate = null;
         LoanedFromEngineerId = null;
+        ProgressPercent = 0;
         RemoveFromSprint();
 
         _history.Add(TaskHistory.Record(Id, "status", oldStatus, TaskStatus.Backlog.ToString(), actorId));

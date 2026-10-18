@@ -68,7 +68,15 @@ public record TaskDto(
     // so the UI leaves out what only makes sense for team delivery (estimates, hand-offs, blockers).
     bool IsPersonal = false,
     /// <summary>When the task was paused, while it is paused — lets a list say how long it has sat there.</summary>
-    DateTime? PausedAt = null)
+    DateTime? PausedAt = null,
+    /// <summary>What the engineer or lead set by hand (0, 25, 50, 75). Used only while the task has no checklist.</summary>
+    int ProgressPercent = 0,
+    /// <summary>How far along the task is, however that is worked out (status, checklist or the manual step) — what to show.</summary>
+    int EffectiveProgress = 0,
+    /// <summary>Points earned so far: points times effective progress.</summary>
+    decimal EarnedPoints = 0m,
+    /// <summary>True when the checklist, not a manual step, is setting the progress.</summary>
+    bool ProgressFromChecklist = false)
 {
     /// <summary>Display key combining the owning project's Code with this task's own TaskNumber
     /// (e.g. "NOTIF-011") — null when the caller didn't resolve ProjectCode (most action-command
@@ -103,7 +111,11 @@ public record TaskDto(
         t.PendingRejectionReason, t.PendingRejectionActorId, pendingRejectionActorName,
         t.PendingRejectionResponse, t.PendingRejectionRespondedByEngineerId, pendingRejectionRespondedByName,
         t.RequiresPrApproval, t.PrLink, t.PendingPrApprovalRequestedAt, pendingPrApprovalRequestedByName,
-        pendingPrApprovalDelegatedToName, pendingPrApprovalApproverNames, canApprovePrApproval, t.PrApprovedAt, PausedAt: t.PausedAt);
+        pendingPrApprovalDelegatedToName, pendingPrApprovalApproverNames, canApprovePrApproval, t.PrApprovedAt, PausedAt: t.PausedAt,
+        ProgressPercent: t.ProgressPercent,
+        EffectiveProgress: TaskProgress.Effective(t.Status, t.ProgressPercent, subtasksDone ?? 0, subtasksTotal ?? 0),
+        EarnedPoints: t.EarnedPoints,
+        ProgressFromChecklist: (subtasksTotal ?? 0) > 0 && t.Status is Domain.Tasks.TaskStatus.Active or Domain.Tasks.TaskStatus.Blocked or Domain.Tasks.TaskStatus.Paused);
 
     private static string Camel(string s) => s.Length == 0 ? s : char.ToLower(s[0]) + s[1..];
 }

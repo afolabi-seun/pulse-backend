@@ -1,3 +1,4 @@
+using Pulse.Application.Projects.Queries;
 using Pulse.Application.Common.Interfaces;
 using Pulse.Application.Engineers.Queries;
 using Pulse.Domain.Engineers;
@@ -19,6 +20,8 @@ public class GetEngineerThroughputQueryTests
         _engineers.Setup(r => r.GetByIdAsync(target.Id, default)).ReturnsAsync(target);
         _tasks.Setup(t => t.GetWeeklyThroughputByAssigneeAsync(target.Id, default))
             .ReturnsAsync(new List<WeeklyThroughputPoint>());
+        _tasks.Setup(t => t.GetWeeklyEarnedByAssigneeAsync(target.Id, default))
+            .ReturnsAsync(new List<WeeklyEarnedPoint>());
         return target;
     }
 
@@ -46,5 +49,21 @@ public class GetEngineerThroughputQueryTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be("FORBIDDEN");
+    }
+
+    [Fact]
+    public async Task Earned_points_are_returned_beside_delivered_ones_including_weeks_where_nothing_was_finished()
+    {
+        var target = SeedTarget();
+        var week1 = new DateOnly(2026, 10, 5);
+        var week2 = new DateOnly(2026, 10, 12);
+        _tasks.Setup(t => t.GetWeeklyThroughputByAssigneeAsync(target.Id, default))
+            .ReturnsAsync(new List<WeeklyThroughputPoint> { new(week1, 5) });
+        _tasks.Setup(t => t.GetWeeklyEarnedByAssigneeAsync(target.Id, default))
+            .ReturnsAsync(new List<WeeklyEarnedPoint> { new(week1, 5m), new(week2, 2.5m) });
+
+        var result = await CreateHandler().Handle(new GetEngineerThroughputQuery(target.Id, target.Id, Roles.Engineer), default);
+
+        result.Data.Should().Equal(new ThroughputWeekDto(week1, 5, 5m), new ThroughputWeekDto(week2, 0, 2.5m));
     }
 }

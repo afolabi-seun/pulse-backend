@@ -175,6 +175,10 @@ public interface ITaskRepository
     /// today, for tasks assigned to any engineer on the given team — the team-level analogue of
     /// <see cref="GetWeeklyThroughputByAssigneeAsync"/>.</summary>
     Task<IReadOnlyList<WeeklyThroughputPoint>> GetWeeklyThroughputByTeamAsync(Guid teamId, CancellationToken ct = default);
+    /// <summary>Points earned per week over the last six weeks (progress credits credited to this engineer), alongside the delivered series.</summary>
+    Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByAssigneeAsync(Guid engineerId, CancellationToken ct = default);
+    /// <summary>The same for everyone on a team.</summary>
+    Task<IReadOnlyList<WeeklyEarnedPoint>> GetWeeklyEarnedByTeamAsync(Guid teamId, CancellationToken ct = default);
     /// <summary>Returns delivered story points grouped by week (Monday) for the 6-week rolling window ending
     /// today, across every team — the org-wide analogue of <see cref="GetWeeklyThroughputByTeamAsync"/>.</summary>
     Task<IReadOnlyList<WeeklyThroughputPoint>> GetWeeklyThroughputOrgWideAsync(CancellationToken ct = default);
