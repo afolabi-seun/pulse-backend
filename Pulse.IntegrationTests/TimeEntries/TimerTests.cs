@@ -167,10 +167,9 @@ public class TimerTests : IntegrationTestBase, IClassFixture<PulseWebApplication
     }
 
     [Fact]
-    public async Task Starting_a_timer_on_a_zero_point_task_succeeds_and_leaves_it_in_backlog()
+    public async Task Starting_a_timer_on_a_zero_point_task_is_refused_until_it_has_points()
     {
-        // Points no longer gate starting a timer — only auto-promotion out of Backlog still
-        // requires them, so this succeeds directly and the task stays in Backlog.
+        // Time is only logged against estimated work: the first start is refused and claims nothing; supplying points then activates and times it.
         var team = await SeedTeamAsync("Timer Points Team");
         var engineer = await SeedEngineerAsync("timer_points@pulse.io");
         await AssignEngineerToTeamAsync(engineer.Id, team.Id);
@@ -179,11 +178,12 @@ public class TimerTests : IntegrationTestBase, IClassFixture<PulseWebApplication
         var task = await SeedTaskAsync("Ungroomed task", project.Id, points: 0, assigneeId: null);
 
         var start = await client.PostAsJsonAsync("/api/v1/time-entries/timer/start", new { category = "task", taskId = task.Id });
-        start.StatusCode.Should().Be(HttpStatusCode.OK);
+        start.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
 
         var taskResp = await client.GetAsync($"/api/v1/tasks/{task.Id}");
         var dto = await taskResp.Content.ReadFromJsonAsync<ApiResponse<TaskDto>>(JsonOpts);
         dto!.Data!.Status.Should().Be("backlog");
+        dto.Data.AssigneeId.Should().BeNull("a refused start must not claim the task");
 
         // Supplying points on a follow-up start still activates it, same as grooming via any
         // other path (Planning Poker, editing the task, etc.).

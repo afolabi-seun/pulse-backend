@@ -1,3 +1,4 @@
+using Pulse.Application.Overwork;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Pulse.Application.Common.Interfaces;
@@ -13,8 +14,13 @@ namespace Pulse.Infrastructure.Persistence.Repositories;
 public class TaskRepository : ITaskRepository
 {
     private readonly PulseDbContext _db;
+    private readonly OverworkThresholds _thresholds;
 
-    public TaskRepository(PulseDbContext db) => _db = db;
+    public TaskRepository(PulseDbContext db, OverworkThresholds thresholds)
+    {
+        _db = db;
+        _thresholds = thresholds;
+    }
 
     private static readonly Regex TaskKeyPattern = new(@"^([A-Za-z]+)-(\d+)$", RegexOptions.Compiled);
 
@@ -401,7 +407,7 @@ public class TaskRepository : ITaskRepository
         var completedInRange = doneRows
             .GroupBy(x => x.Id)
             .Select(g => g.OrderByDescending(x => x.ChangedAt).First())
-            .Where(x => x.ChangedAt >= from && x.ChangedAt <= to)
+            .Where(x => x.ChangedAt >= _thresholds.FloorTime(from) && x.ChangedAt <= to)
             .ToList();
 
         var deliveredPoints = completedInRange.Sum(t => t.Points);
@@ -428,7 +434,7 @@ public class TaskRepository : ITaskRepository
             ? []
             : await _db.TaskHistory
                 .Where(h => assigneeTaskIds.Contains(h.TaskId) && h.Field == "status" && h.NewValue == "InQa"
-                         && h.ChangedAt >= from && h.ChangedAt <= to)
+                         && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
                 .Select(h => h.TaskId)
                 .Distinct()
                 .ToListAsync(ct);
@@ -561,7 +567,7 @@ public class TaskRepository : ITaskRepository
                      && x.t.ParentTaskId == null
                      && x.h.Field == "status"
                      && x.h.NewValue == "Done"
-                     && x.h.ChangedAt >= sixWeeksAgo)
+                     && x.h.ChangedAt >= _thresholds.FloorTime(sixWeeksAgo))
             .Select(x => new { x.t.Points, x.h.ChangedAt })
             .ToListAsync(ct);
 
@@ -596,7 +602,7 @@ public class TaskRepository : ITaskRepository
                      && x.t.ParentTaskId == null
                      && x.h.Field == "status"
                      && x.h.NewValue == "Done"
-                     && x.h.ChangedAt >= sixWeeksAgo)
+                     && x.h.ChangedAt >= _thresholds.FloorTime(sixWeeksAgo))
             .Select(x => new { x.t.Points, x.h.ChangedAt })
             .ToListAsync(ct);
 
@@ -623,7 +629,7 @@ public class TaskRepository : ITaskRepository
                      && x.t.ParentTaskId == null
                      && x.h.Field == "status"
                      && x.h.NewValue == "Done"
-                     && x.h.ChangedAt >= sixWeeksAgo)
+                     && x.h.ChangedAt >= _thresholds.FloorTime(sixWeeksAgo))
             .Select(x => new { x.t.Points, x.h.ChangedAt })
             .ToListAsync(ct);
 
@@ -641,7 +647,7 @@ public class TaskRepository : ITaskRepository
     public async Task<int> GetDeliveredPointsInRangeAsync(DateTime from, DateTime to, CancellationToken ct = default)
     {
         var taskIds = await _db.TaskHistory
-            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Select(h => h.TaskId)
             .Distinct()
             .ToListAsync(ct);
@@ -659,7 +665,7 @@ public class TaskRepository : ITaskRepository
     public async Task<int> GetDeliveredPointsInRangeAsync(DateTime from, DateTime to, IReadOnlyList<Guid> projectIds, CancellationToken ct = default)
     {
         var taskIds = await _db.TaskHistory
-            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Select(h => h.TaskId)
             .Distinct()
             .ToListAsync(ct);
@@ -698,13 +704,13 @@ public class TaskRepository : ITaskRepository
     /// than one Done-transition in its history (reopened and redone); takes the latest, same as
     /// GetPerformanceStatsAsync's own avgCycleTimeDays, then filters to the requested range by that
     /// transition's timestamp.</summary>
-    private static double? AverageCycleTimeInRange(
+    private double? AverageCycleTimeInRange(
         IEnumerable<(Guid Id, DateTime CreatedAt, DateOnly? ActualEndDate, DateTime ChangedAt)> doneRows, DateTime from, DateTime to)
     {
         var completedInRange = doneRows
             .GroupBy(x => x.Id)
             .Select(g => g.OrderByDescending(x => x.ChangedAt).First())
-            .Where(x => x.ChangedAt >= from && x.ChangedAt <= to)
+            .Where(x => x.ChangedAt >= _thresholds.FloorTime(from) && x.ChangedAt <= to)
             .ToList();
 
         return completedInRange.Count == 0
@@ -719,7 +725,7 @@ public class TaskRepository : ITaskRepository
             .Select(h => new { h.TaskId, h.ChangedAt })
             .ToListAsync(ct);
         var approvals = await _db.TaskHistory
-            .Where(h => h.Field == "pr_approved_at" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "pr_approved_at" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Select(h => new { h.TaskId, h.ChangedAt })
             .ToListAsync(ct);
 
@@ -736,7 +742,7 @@ public class TaskRepository : ITaskRepository
             .Join(taskIdsInProjects, h => h.TaskId, id => id, (h, id) => new { h.TaskId, h.ChangedAt })
             .ToListAsync(ct);
         var approvals = await _db.TaskHistory
-            .Where(h => h.Field == "pr_approved_at" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "pr_approved_at" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Join(taskIdsInProjects, h => h.TaskId, id => id, (h, id) => new { h.TaskId, h.ChangedAt })
             .ToListAsync(ct);
 
@@ -774,7 +780,7 @@ public class TaskRepository : ITaskRepository
         // the task's current assignee, which may have changed since. Falls back to the task's
         // current AssigneeId for history rows written before this column existed.
         var doneEvents = await _db.TaskHistory
-            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Join(_db.Tasks, h => h.TaskId, t => t.Id, (h, t) => new { h.TaskId, Credited = h.CreditedEngineerId ?? t.AssigneeId, h.ChangedAt })
             .ToListAsync(ct);
 
@@ -799,7 +805,7 @@ public class TaskRepository : ITaskRepository
     {
         // Same CreditedEngineerId-with-fallback basis as GetDeliveredPointsInRangeByAssigneesAsync.
         var doneEvents = await _db.TaskHistory
-            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "status" && h.NewValue == "Done" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .Join(_db.Tasks, h => h.TaskId, t => t.Id, (h, t) => new { h.TaskId, Credited = h.CreditedEngineerId ?? t.AssigneeId, h.ChangedAt, t.ParentTaskId })
             .ToListAsync(ct);
 
@@ -818,7 +824,7 @@ public class TaskRepository : ITaskRepository
     public async Task<IReadOnlyDictionary<Guid, int>> GetSubtaskCompletionCountByEngineerInRangeAsync(DateTime from, DateTime to, CancellationToken ct = default)
     {
         var rows = await _db.TaskHistory
-            .Where(h => h.Field == "subtask_completed" && h.ChangedAt >= from && h.ChangedAt <= to)
+            .Where(h => h.Field == "subtask_completed" && h.ChangedAt >= _thresholds.FloorTime(from) && h.ChangedAt <= to)
             .GroupBy(h => h.ActorId)
             .Select(g => new { EngineerId = g.Key, Count = g.Count() })
             .ToListAsync(ct);

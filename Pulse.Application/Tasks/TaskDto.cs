@@ -66,7 +66,9 @@ public record TaskDto(
     bool QaTaskMissing = false,
     // True for a task in its owner's personal-tasks project (see Project.PersonalOwnerId) — a private to-do,
     // so the UI leaves out what only makes sense for team delivery (estimates, hand-offs, blockers).
-    bool IsPersonal = false)
+    bool IsPersonal = false,
+    /// <summary>When the task was paused, while it is paused — lets a list say how long it has sat there.</summary>
+    DateTime? PausedAt = null)
 {
     /// <summary>Display key combining the owning project's Code with this task's own TaskNumber
     /// (e.g. "NOTIF-011") — null when the caller didn't resolve ProjectCode (most action-command
@@ -101,7 +103,7 @@ public record TaskDto(
         t.PendingRejectionReason, t.PendingRejectionActorId, pendingRejectionActorName,
         t.PendingRejectionResponse, t.PendingRejectionRespondedByEngineerId, pendingRejectionRespondedByName,
         t.RequiresPrApproval, t.PrLink, t.PendingPrApprovalRequestedAt, pendingPrApprovalRequestedByName,
-        pendingPrApprovalDelegatedToName, pendingPrApprovalApproverNames, canApprovePrApproval, t.PrApprovedAt);
+        pendingPrApprovalDelegatedToName, pendingPrApprovalApproverNames, canApprovePrApproval, t.PrApprovedAt, PausedAt: t.PausedAt);
 
     private static string Camel(string s) => s.Length == 0 ? s : char.ToLower(s[0]) + s[1..];
 }

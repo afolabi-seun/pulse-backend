@@ -503,16 +503,15 @@ public class PulseTaskTests
     }
 
     [Fact]
-    public void ActivateForTimer_succeeds_for_an_ungroomed_Backlog_task_but_leaves_it_in_Backlog()
+    public void ActivateForTimer_refuses_an_unestimated_Backlog_task()
     {
-        // Points no longer gate starting a timer, but PromoteFromBacklogIfGroomed still requires
-        // them to actually leave Backlog — so this succeeds without throwing, and the task simply
-        // stays in Backlog while the timer runs.
+        // Hours belong on sized work: with no points there is no estimate to measure them against.
         var task = PulseTask.Create("Untriaged", 0, Guid.NewGuid());
         task.Assign(Guid.NewGuid(), Guid.NewGuid());
 
-        task.ActivateForTimer(Guid.NewGuid());
+        var act = () => task.ActivateForTimer(Guid.NewGuid());
 
+        act.Should().Throw<DomainException>().WithMessage("*no estimate*");
         task.Status.Should().Be(DomainTaskStatus.Backlog);
     }
 
@@ -568,17 +567,26 @@ public class PulseTaskTests
     }
 
     [Fact]
-    public void ActivateForTimer_still_succeeds_for_an_ungroomed_Backlog_task()
+    public void ActivateForTimer_still_succeeds_for_an_estimated_Backlog_task_so_it_can_be_claimed()
     {
-        // Unlike Paused/Blocked, Backlog is deliberately left allowed here — starting a timer on
-        // an unclaimed backlog task is the actual claiming mechanism (the "Unclaimed" timer tab),
-        // not something EnsureCanLogTimeEntry's stricter Backlog rejection should touch.
-        var task = PulseTask.Create("Untriaged", 0, Guid.NewGuid());
-        task.Assign(Guid.NewGuid(), Guid.NewGuid());
+        // Starting a timer on an unclaimed, estimated backlog task is the claiming mechanism (the "Unclaimed" timer tab).
+        // Without an assignee it only stays in Backlog here; StartTimerCommand assigns first and the task then activates.
+        var task = NewTask();
 
         task.ActivateForTimer(Guid.NewGuid());
 
         task.Status.Should().Be(DomainTaskStatus.Backlog);
+    }
+
+    [Fact]
+    public void ActivateForTimer_activates_an_estimated_Backlog_task_that_has_an_assignee()
+    {
+        var task = NewTask();
+        task.Assign(Guid.NewGuid(), Guid.NewGuid());
+
+        task.ActivateForTimer(Guid.NewGuid());
+
+        task.Status.Should().Be(DomainTaskStatus.Active);
     }
 
     // ── EnsureCanLogTimeEntry ─────────────────────────────────────────────────
@@ -615,7 +623,7 @@ public class PulseTaskTests
 
         var act = () => task.EnsureCanLogTimeEntry();
 
-        act.Should().Throw<DomainException>().WithMessage("*hasn't started*");
+        act.Should().Throw<DomainException>().WithMessage("*still in the Backlog*");
     }
 
     [Fact]
