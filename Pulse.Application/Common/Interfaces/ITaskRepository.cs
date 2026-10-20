@@ -72,7 +72,8 @@ public interface ITaskRepository
     Task<IReadOnlyList<PulseTask>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default);
     /// <remarks>`statuses` keeps tasks in any of the given statuses (alongside `status`, which must also match if given). `dateFrom`/`dateTo` bound a task's relevant
     /// date: when it was completed for a Done task (its due date if no completion date was recorded), otherwise its due date. A task that is not Done and has no
-    /// due date (typically Backlog) is never dropped by the date range — it has no date to be outside it.</remarks>
+    /// due date (typically Backlog) is never dropped by the date range — it has no date to be outside it. `hideFinishedBefore` leaves out Done tasks completed before that
+    /// date (due date if none was recorded; a Done task with neither is kept) and touches nothing that is not Done.</remarks>
     Task<(IReadOnlyList<PulseTask> Items, string? NextCursor)> ListAsync(
         Guid? projectId, Guid? assigneeId, Pulse.Domain.Tasks.TaskStatus? status,
         Pulse.Domain.Tasks.TaskType? taskType, Guid? sprintId, Guid? epicId, int limit, string? cursor,
@@ -81,7 +82,7 @@ public interface ITaskRepository
         Discipline? discipline = null, bool excludeDone = false, IReadOnlyList<Guid>? excludeAssigneeIds = null,
         bool noAssignee = false, string? sortBy = null, string? sortDirection = null,
         IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>? statuses = null, DateOnly? dateFrom = null, DateOnly? dateTo = null,
-        CancellationToken ct = default);
+        DateOnly? hideFinishedBefore = null, CancellationToken ct = default);
     Task<IReadOnlyList<PulseTask>> GetActiveByAssigneeAsync(Guid assigneeId, CancellationToken ct = default);
     /// <summary>Tasks this engineer most recently did backend work on (BackendAssigneeId) that
     /// aren't currently assigned to them — i.e. handed off to Frontend and not yet handed back.

@@ -1,5 +1,6 @@
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Overwork;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Tasks;
 using MediatR;
@@ -26,7 +27,8 @@ public record ListTasksQuery(
     string? SortDirection = null,
     string? Statuses = null,
     DateOnly? DateFrom = null,
-    DateOnly? DateTo = null) : IRequest<ServiceResult<PagedResult<TaskDto>>>;
+    DateOnly? DateTo = null,
+    bool IncludeBeforeReportingStart = false) : IRequest<ServiceResult<PagedResult<TaskDto>>>;
 
 public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<PagedResult<TaskDto>>>
 {
@@ -37,10 +39,11 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
     private readonly ISprintRepository    _sprints;
     private readonly ISubtaskRepository   _subtasks;
     private readonly IProjectAccessPolicy _access;
+    private readonly OverworkThresholds  _thresholds;
 
     public ListTasksHandler(ITaskRepository tasks, IEngineerRepository engineers,
         IProjectRepository projects, ITeamRepository teams, ISprintRepository sprints,
-        ISubtaskRepository subtasks, IProjectAccessPolicy access)
+        ISubtaskRepository subtasks, IProjectAccessPolicy access, OverworkThresholds thresholds)
     {
         _tasks     = tasks;
         _engineers = engineers;
@@ -49,6 +52,7 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
         _sprints   = sprints;
         _subtasks  = subtasks;
         _access    = access;
+        _thresholds = thresholds;
     }
 
     public async Task<ServiceResult<PagedResult<TaskDto>>> Handle(ListTasksQuery query, CancellationToken ct)
@@ -101,6 +105,11 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
 
         var limit = Math.Clamp(query.Limit, 1, 100);
 
+        // Finished work from before the reporting start date is left out of lists and boards (the reports already leave it out), so September does not
+        // show next to October. A sprint's own view keeps every task: its done/total progress is read from this list, and a sprint is a complete record.
+        // Callers that need the earlier records ask for them (the History tab's "All time").
+        DateOnly? hideFinishedBefore = query.IncludeBeforeReportingStart || query.SprintId.HasValue ? null : _thresholds.ReportingBaseline;
+
         // Viewing one specific sprint (e.g. a Sprint Detail board) is all-or-nothing: once the
         // caller is confirmed to have access to that sprint, they should see everything in it. The
         // per-role narrowing below exists for browsing broadly *across* many sprints/projects (an
@@ -118,7 +127,7 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
                     query.ProjectId, query.AssigneeId, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor,
                     query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone,
                     sortBy: query.SortBy, sortDirection: query.SortDirection,
-                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, hideFinishedBefore: hideFinishedBefore, ct: ct);
                 var sprintDtos = await ToDtosAsync(sprintItems, query.ActorId, ct);
                 return ServiceResult<PagedResult<TaskDto>>.Ok(
                     new PagedResult<TaskDto>(sprintDtos, sprintCursor, sprintCursor is not null));
@@ -150,7 +159,7 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
                     query.ProjectId, null, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor,
                     query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone,
                     noAssignee: true, sortBy: query.SortBy, sortDirection: query.SortDirection,
-                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, hideFinishedBefore: hideFinishedBefore, ct: ct);
                 var unclaimedDtos = await ToDtosAsync(unclaimedItems, query.ActorId, ct);
                 return ServiceResult<PagedResult<TaskDto>>.Ok(
                     new PagedResult<TaskDto>(unclaimedDtos, unclaimedCursor, unclaimedCursor is not null));
@@ -171,7 +180,7 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
             var (items, nextCursor) = await _tasks.ListAsync(
                 query.ProjectId, assigneeFilter, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor, query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone, excludeAssigneeIds: seniorAssigneeIds,
                 sortBy: query.SortBy, sortDirection: query.SortDirection,
-                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, hideFinishedBefore: hideFinishedBefore, ct: ct);
             var icDtos = await ToDtosAsync(items, query.ActorId, ct);
             return ServiceResult<PagedResult<TaskDto>>.Ok(
                 new PagedResult<TaskDto>(icDtos, nextCursor, nextCursor is not null));
@@ -258,7 +267,7 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
         var (taskItems, cursor) = await _tasks.ListAsync(
             query.ProjectId, query.AssigneeId, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor, query.NoSprint, query.Title, deptFilter, deptSprintIds, deptProjectIds, query.Discipline, query.ExcludeDone, noAssignee: query.NoAssignee,
             sortBy: query.SortBy, sortDirection: query.SortDirection,
-                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, hideFinishedBefore: hideFinishedBefore, ct: ct);
 
         var dtos = await ToDtosAsync(taskItems, query.ActorId, ct);
         return ServiceResult<PagedResult<TaskDto>>.Ok(new PagedResult<TaskDto>(dtos, cursor, cursor is not null));

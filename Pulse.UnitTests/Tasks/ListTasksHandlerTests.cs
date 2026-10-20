@@ -1,5 +1,6 @@
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Overwork;
 using Pulse.Application.Tasks.Queries;
 using Pulse.Domain.Engineers;
 using Pulse.Domain.Projects;
@@ -18,6 +19,7 @@ public class ListTasksHandlerTests
     private readonly Mock<ISprintRepository> _sprints = new();
     private readonly Mock<ISubtaskRepository> _subtasks = new();
     private readonly Mock<IProjectAccessPolicy> _access = new();
+    private OverworkThresholds Thresholds { get; } = new();
 
     public ListTasksHandlerTests()
     {
@@ -33,7 +35,7 @@ public class ListTasksHandlerTests
     }
 
     private ListTasksHandler CreateHandler() =>
-        new(_tasks.Object, _engineers.Object, _projects.Object, _teams.Object, _sprints.Object, _subtasks.Object, _access.Object);
+        new(_tasks.Object, _engineers.Object, _projects.Object, _teams.Object, _sprints.Object, _subtasks.Object, _access.Object, Thresholds);
 
     private static PulseTask ActiveTask(Guid projectId, Guid? assigneeId = null)
     {
@@ -54,7 +56,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, actorId, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(projectId)), default))
@@ -83,7 +85,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(projectId)), default))
@@ -110,7 +112,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), default))
@@ -137,7 +139,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), default))
@@ -195,7 +197,7 @@ public class ListTasksHandlerTests
                 It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<string?>(),
                 It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
                 It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(),
-                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
+                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
@@ -236,7 +238,7 @@ public class ListTasksHandlerTests
                 It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<string?>(),
                 It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
                 It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(),
-                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
+                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects.Setup(p => p.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
@@ -249,5 +251,69 @@ public class ListTasksHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Items.Should().ContainSingle();
+    }
+
+    // ── Finished work before the reporting start date ────────────────────────────
+
+    private void ReturnNoTasks() =>
+        _tasks
+            .Setup(r => r.ListAsync(It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Pulse.Domain.Tasks.TaskStatus?>(), It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
+                It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<bool>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Array.Empty<PulseTask>(), (string?)null));
+
+    private void VerifyHidFinishedBefore(DateOnly? expected) =>
+        _tasks.Verify(r => r.ListAsync(It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Pulse.Domain.Tasks.TaskStatus?>(), It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
+                It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<bool>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), expected,
+                It.IsAny<CancellationToken>()), Times.Once);
+
+    [Fact]
+    public async Task Hides_finished_tasks_from_before_the_reporting_start_date()
+    {
+        Thresholds.ReportingBaseline = new DateOnly(2026, 10, 1);
+        ReturnNoTasks();
+
+        await CreateHandler().Handle(new ListTasksQuery(Guid.NewGuid(), Roles.ProjectManager, null, null, null, null, null, null, 20, null), default);
+
+        VerifyHidFinishedBefore(new DateOnly(2026, 10, 1));
+    }
+
+    [Fact]
+    public async Task Hides_nothing_when_there_is_no_reporting_start_date()
+    {
+        ReturnNoTasks();
+
+        await CreateHandler().Handle(new ListTasksQuery(Guid.NewGuid(), Roles.ProjectManager, null, null, null, null, null, null, 20, null), default);
+
+        VerifyHidFinishedBefore(null);
+    }
+
+    [Fact]
+    public async Task Includes_earlier_finished_tasks_when_asked()
+    {
+        Thresholds.ReportingBaseline = new DateOnly(2026, 10, 1);
+        ReturnNoTasks();
+
+        await CreateHandler().Handle(
+            new ListTasksQuery(Guid.NewGuid(), Roles.ProjectManager, null, null, null, null, null, null, 20, null, IncludeBeforeReportingStart: true), default);
+
+        VerifyHidFinishedBefore(null);
+    }
+
+    [Fact]
+    public async Task Keeps_every_task_inside_a_single_sprint()
+    {
+        Thresholds.ReportingBaseline = new DateOnly(2026, 10, 1);
+        ReturnNoTasks();
+
+        // The sprint is unknown, so the handler falls through to the per-role listing — the rule must still not apply to a request scoped to a sprint.
+        await CreateHandler().Handle(
+            new ListTasksQuery(Guid.NewGuid(), Roles.ProjectManager, null, null, null, null, Guid.NewGuid(), null, 20, null), default);
+
+        VerifyHidFinishedBefore(null);
     }
 }
