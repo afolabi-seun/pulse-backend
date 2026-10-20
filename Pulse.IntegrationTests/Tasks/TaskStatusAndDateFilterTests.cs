@@ -137,4 +137,57 @@ public class TaskStatusAndDateFilterTests : IntegrationTestBase, IClassFixture<P
         var all = await ListIdsAsync(client, t.ProjectId, $"statuses=done,paused,backlog&dateFrom={Today.AddDays(-30):yyyy-MM-dd}");
         all.Should().BeEquivalentTo([t.Paused, t.DoneRecent, t.BacklogUndated]);
     }
+
+    private static HttpContent BaselineBody(DateOnly? d) => JsonContent.Create(new { date = d?.ToString("yyyy-MM-dd") });
+
+    [Fact]
+    public async Task Finished_tasks_from_before_the_reporting_start_date_are_hidden_from_lists_unless_asked_for()
+    {
+        var (t, client) = await SeedMixedAsync("hidefinished");
+        var pmoEmail = "hidefinished_pmo@pulse.io";
+        await SeedEngineerAsync(pmoEmail, Roles.HeadOfPmo);
+        var pmo = await AuthenticatedClientAsync(pmoEmail);
+        try
+        {
+            (await pmo.PutAsync("/api/v1/reports/baseline", BaselineBody(Today.AddDays(-30)))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var ids = await ListIdsAsync(client, t.ProjectId, "");
+
+            ids.Should().NotContain(t.DoneOld, "it was finished 60 days ago, before the start date");
+            ids.Should().Contain([t.DoneRecent, t.Active, t.Paused, t.BacklogUndated]);
+            ids.Should().Contain(t.BacklogDueOld, "unfinished work is never hidden, however old its due date");
+
+            var everything = await ListIdsAsync(client, t.ProjectId, "includeBeforeReportingStart=true");
+            everything.Should().Contain(t.DoneOld);
+        }
+        finally
+        {
+            await pmo.PutAsync("/api/v1/reports/baseline", BaselineBody(null)); // leave the shared server clean for other tests
+        }
+    }
+
+    [Fact]
+    public async Task A_single_sprint_keeps_every_task_even_before_the_reporting_start_date()
+    {
+        var (t, client) = await SeedMixedAsync("hidesprint");
+        var team = await SeedTeamAsync("Hide sprint team");
+        var sprint = await SeedSprintAsync(team.Id, "Hide sprint", t.ProjectId);
+        await AssignTaskToSprintAsync(t.DoneOld, sprint.Id);
+        var pmoEmail = "hidesprint_pmo@pulse.io";
+        await SeedEngineerAsync(pmoEmail, Roles.HeadOfPmo);
+        var pmo = await AuthenticatedClientAsync(pmoEmail);
+        try
+        {
+            (await pmo.PutAsync("/api/v1/reports/baseline", BaselineBody(Today.AddDays(-30)))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var resp = await client.GetAsync($"/api/v1/tasks?sprintId={sprint.Id}&limit=100");
+            var body = await resp.Content.ReadFromJsonAsync<ApiResponse<PagedResult<TaskDto>>>(JsonOpts);
+
+            body!.Data!.Items.Select(x => x.Id).Should().Contain(t.DoneOld);
+        }
+        finally
+        {
+            await pmo.PutAsync("/api/v1/reports/baseline", BaselineBody(null));
+        }
+    }
 }
