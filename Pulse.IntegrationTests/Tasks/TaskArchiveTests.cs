@@ -34,12 +34,12 @@ public class TaskArchiveTests : IntegrationTestBase, IClassFixture<PulseWebAppli
         await db.TaskHistory.Where(h => ids.Contains(h.TaskId)).ExecuteUpdateAsync(s => s.SetProperty(h => h.ChangedAt, past));
     }
 
-    private static object Body(Guid projectId, bool dryRun, bool includeTouched = false, string? reason = "Pilot clean-up") =>
-        new { baselineStart = Today, projectIds = new[] { projectId }, includeTouched, dryRun, reason };
+    private static object Body(Guid projectId, bool dryRun, bool includeTouched = false, string? reason = "Pilot clean-up", bool includeFinishedTouched = false) =>
+        new { baselineStart = Today, projectIds = new[] { projectId }, includeTouched, includeFinishedTouched, dryRun, reason };
 
-    private async Task<ArchiveTasksResult> ArchiveAsync(HttpClient pmo, Guid projectId, bool dryRun, bool includeTouched = false)
+    private async Task<ArchiveTasksResult> ArchiveAsync(HttpClient pmo, Guid projectId, bool dryRun, bool includeTouched = false, bool includeFinishedTouched = false)
     {
-        var res = await pmo.PostAsJsonAsync("/api/v1/tasks/archive", Body(projectId, dryRun, includeTouched));
+        var res = await pmo.PostAsJsonAsync("/api/v1/tasks/archive", Body(projectId, dryRun, includeTouched, includeFinishedTouched: includeFinishedTouched));
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         return (await res.Content.ReadFromJsonAsync<ApiResponse<ArchiveTasksResult>>(JsonOpts))!.Data!;
     }
@@ -121,6 +121,36 @@ public class TaskArchiveTests : IntegrationTestBase, IClassFixture<PulseWebAppli
 
         (await ArchiveAsync(client, project.Id, dryRun: false, includeTouched: true)).ToArchive.Should().Be(1);
         (await VisibleCountAsync(project.Id)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Finished_tasks_touched_since_the_baseline_can_be_archived_while_open_ones_stay()
+    {
+        // A task created before the baseline and finished after it has activity since (finishing it), so the plain archive keeps it. The narrower option
+        // archives finished tasks like that without also sweeping up open tasks that people are still working on.
+        var eng = await SeedEngineerAsync("ar_eng_fin@pulse.io");
+        await SeedEngineerAsync("ar_pmo_fin@pulse.io", Roles.HeadOfPmo);
+        var project = await SeedProjectAsync("Archive finished touched");
+        var finished = await SeedTaskAsync("Finished after the baseline", project.Id, assigneeId: eng.Id);
+        var open = await SeedTaskAsync("Still being worked", project.Id, assigneeId: eng.Id);
+        await SeedTaskAsync("Dormant", project.Id);
+        await MarkTaskDoneAsync(finished.Id);
+        await BackdateAsync(project.Id);
+        await SeedCommentAsync(finished.Id, eng.Id);   // activity since the baseline on both
+        await SeedCommentAsync(open.Id, eng.Id);
+        var client = await AuthenticatedClientAsync("ar_pmo_fin@pulse.io");
+
+        var plain = await ArchiveAsync(client, project.Id, dryRun: true);
+        plain.ToArchive.Should().Be(1);                       // only "Dormant"
+        plain.KeptBecauseTouched.Should().Be(2);
+
+        var narrow = await ArchiveAsync(client, project.Id, dryRun: true, includeFinishedTouched: true);
+        narrow.ToArchive.Should().Be(2);                      // "Dormant" and the finished task
+        narrow.KeptBecauseTouched.Should().Be(1);
+        narrow.KeptTasks.Should().ContainSingle(t => t.Title == "Still being worked");
+
+        (await ArchiveAsync(client, project.Id, dryRun: false, includeFinishedTouched: true)).ToArchive.Should().Be(2);
+        (await VisibleCountAsync(project.Id)).Should().Be(1);   // the open, touched task is still there
     }
 
     [Fact]
