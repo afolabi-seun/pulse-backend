@@ -96,7 +96,8 @@ public class TasksController : ControllerBase
     /// <remarks>
     /// Engineers see only tasks assigned to them. Team leads and above see all tasks.
     /// Filter by projectId, assigneeId (PM+ only), or status. excludeDone hides Done tasks
-    /// regardless of the status filter — used for "active work" views like the dashboard.
+    /// regardless of the status filter — used for "active work" views like the dashboard. `statuses` takes a comma-separated list; `dateFrom`/`dateTo` bound a
+    /// task's completion date (Done) or due date (anything else, undated work always stays in).
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<TaskDto>>), StatusCodes.Status200OK)]
@@ -117,11 +118,14 @@ public class TasksController : ControllerBase
         [FromQuery] bool excludeDone = false,
         [FromQuery] bool noAssignee = false,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] string? statuses = null,
+        [FromQuery] DateOnly? dateFrom = null,
+        [FromQuery] DateOnly? dateTo = null)
     {
         Discipline? parsedDiscipline = discipline is not null && Enum.TryParse<Discipline>(discipline, ignoreCase: true, out var d) ? d : null;
         return (await _mediator.Send(new ListTasksQuery(
-            GetActorId(), GetRole(), projectId, assigneeId, status, taskType, sprintId, epicId, limit, cursor, noSprint, title, parsedDiscipline, excludeDone, noAssignee, sortBy, sortDirection))).ToActionResult();
+            GetActorId(), GetRole(), projectId, assigneeId, status, taskType, sprintId, epicId, limit, cursor, noSprint, title, parsedDiscipline, excludeDone, noAssignee, sortBy, sortDirection, statuses, dateFrom, dateTo))).ToActionResult();
     }
 
     /// <summary>Returns the caller's open QA review queue — QA sub-tasks assigned to them, across every

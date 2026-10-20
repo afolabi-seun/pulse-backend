@@ -23,7 +23,10 @@ public record ListTasksQuery(
     bool ExcludeDone = false,
     bool NoAssignee = false,
     string? SortBy = null,
-    string? SortDirection = null) : IRequest<ServiceResult<PagedResult<TaskDto>>>;
+    string? SortDirection = null,
+    string? Statuses = null,
+    DateOnly? DateFrom = null,
+    DateOnly? DateTo = null) : IRequest<ServiceResult<PagedResult<TaskDto>>>;
 
 public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<PagedResult<TaskDto>>>
 {
@@ -57,6 +60,21 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
                 return ServiceResult<PagedResult<TaskDto>>.Fail("VALIDATION_ERROR", $"Invalid status '{query.Status}'.");
             status = parsed;
         }
+
+        // Several statuses at once (comma-separated), for views that group them (Active + Blocked; Done + In QA + Paused ...).
+        List<Domain.Tasks.TaskStatus>? statuses = null;
+        if (!string.IsNullOrWhiteSpace(query.Statuses))
+        {
+            statuses = [];
+            foreach (var raw in query.Statuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Enum.TryParse<Domain.Tasks.TaskStatus>(raw, ignoreCase: true, out var parsedStatus))
+                    return ServiceResult<PagedResult<TaskDto>>.Fail("VALIDATION_ERROR", $"Invalid status '{raw}'.");
+                statuses.Add(parsedStatus);
+            }
+        }
+        if (query.DateFrom.HasValue && query.DateTo.HasValue && query.DateFrom > query.DateTo)
+            return ServiceResult<PagedResult<TaskDto>>.Fail("VALIDATION_ERROR", "The start date must not be after the end date.");
 
         Domain.Tasks.TaskType? taskType = null;
         if (query.TaskType is not null)
@@ -99,7 +117,8 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
                 var (sprintItems, sprintCursor) = await _tasks.ListAsync(
                     query.ProjectId, query.AssigneeId, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor,
                     query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone,
-                    sortBy: query.SortBy, sortDirection: query.SortDirection, ct: ct);
+                    sortBy: query.SortBy, sortDirection: query.SortDirection,
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
                 var sprintDtos = await ToDtosAsync(sprintItems, query.ActorId, ct);
                 return ServiceResult<PagedResult<TaskDto>>.Ok(
                     new PagedResult<TaskDto>(sprintDtos, sprintCursor, sprintCursor is not null));
@@ -130,7 +149,8 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
                 var (unclaimedItems, unclaimedCursor) = await _tasks.ListAsync(
                     query.ProjectId, null, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor,
                     query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone,
-                    noAssignee: true, sortBy: query.SortBy, sortDirection: query.SortDirection, ct: ct);
+                    noAssignee: true, sortBy: query.SortBy, sortDirection: query.SortDirection,
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
                 var unclaimedDtos = await ToDtosAsync(unclaimedItems, query.ActorId, ct);
                 return ServiceResult<PagedResult<TaskDto>>.Ok(
                     new PagedResult<TaskDto>(unclaimedDtos, unclaimedCursor, unclaimedCursor is not null));
@@ -150,7 +170,8 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
 
             var (items, nextCursor) = await _tasks.ListAsync(
                 query.ProjectId, assigneeFilter, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor, query.NoSprint, query.Title, discipline: query.Discipline, excludeDone: query.ExcludeDone, excludeAssigneeIds: seniorAssigneeIds,
-                sortBy: query.SortBy, sortDirection: query.SortDirection, ct: ct);
+                sortBy: query.SortBy, sortDirection: query.SortDirection,
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
             var icDtos = await ToDtosAsync(items, query.ActorId, ct);
             return ServiceResult<PagedResult<TaskDto>>.Ok(
                 new PagedResult<TaskDto>(icDtos, nextCursor, nextCursor is not null));
@@ -236,7 +257,8 @@ public class ListTasksHandler : IRequestHandler<ListTasksQuery, ServiceResult<Pa
 
         var (taskItems, cursor) = await _tasks.ListAsync(
             query.ProjectId, query.AssigneeId, status, taskType, query.SprintId, query.EpicId, limit, query.Cursor, query.NoSprint, query.Title, deptFilter, deptSprintIds, deptProjectIds, query.Discipline, query.ExcludeDone, noAssignee: query.NoAssignee,
-            sortBy: query.SortBy, sortDirection: query.SortDirection, ct: ct);
+            sortBy: query.SortBy, sortDirection: query.SortDirection,
+                    statuses: statuses, dateFrom: query.DateFrom, dateTo: query.DateTo, ct: ct);
 
         var dtos = await ToDtosAsync(taskItems, query.ActorId, ct);
         return ServiceResult<PagedResult<TaskDto>>.Ok(new PagedResult<TaskDto>(dtos, cursor, cursor is not null));
