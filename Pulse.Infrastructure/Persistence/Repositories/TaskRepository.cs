@@ -111,7 +111,7 @@ public class TaskRepository : ITaskRepository
         Domain.Tasks.Discipline? discipline = null, bool excludeDone = false, IReadOnlyList<Guid>? excludeAssigneeIds = null,
         bool noAssignee = false, string? sortBy = null, string? sortDirection = null,
         IReadOnlyList<Domain.Tasks.TaskStatus>? statuses = null, DateOnly? dateFrom = null, DateOnly? dateTo = null,
-        CancellationToken ct = default)
+        DateOnly? hideFinishedBefore = null, CancellationToken ct = default)
     {
         var query = _db.Tasks.AsQueryable();
 
@@ -159,6 +159,13 @@ public class TaskRepository : ITaskRepository
             query = query.Where(t => statuses.Contains(t.Status));
         // The date range reads a Done task by when it was completed and anything else by its due date; undated, unfinished work (Backlog) is never
         // dropped by it. Only narrows the set: ordering and cursors below are untouched.
+        if (hideFinishedBefore.HasValue)
+        {
+            var earliest = hideFinishedBefore.Value;
+            query = query.Where(t => t.Status != Domain.Tasks.TaskStatus.Done
+                || (t.ActualEndDate ?? t.DueDate) == null
+                || (t.ActualEndDate ?? t.DueDate) >= earliest);
+        }
         if (dateFrom.HasValue)
         {
             var from = dateFrom.Value;
