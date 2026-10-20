@@ -13,7 +13,8 @@ namespace Pulse.Application.Tasks.Archive;
 /// Selection: tasks created before the baseline, in any project (or only <paramref name="ProjectIds"/>), except tasks in a personal project (someone's private
 /// to-do list is not pilot leftovers). A task's QA task goes with it (a QA task can be created after the cutoff, when its parent is sent to QA).
 /// A task that has been TOUCHED since the baseline began (a history entry, a comment, time logged) is live work, so it is kept unless
-/// <paramref name="IncludeTouched"/>; a task and its QA task are kept or archived together.
+/// <paramref name="IncludeTouched"/>; a task and its QA task are kept or archived together. <paramref name="IncludeFinishedTouched"/> is the narrower override: a
+/// FINISHED (Done) task is archived even if it was touched since (finishing it in the new period is itself the touch), while open tasks touched since are still kept.
 /// </summary>
 public record ArchiveTasksCommand(
     DateOnly BaselineStart,
@@ -24,7 +25,8 @@ public record ArchiveTasksCommand(
     Guid ActorId,
     string? IpAddress,
     string ActorRole = "",
-    int UtcOffsetMinutes = 0) : IRequest<ServiceResult<ArchiveTasksResult>>;
+    int UtcOffsetMinutes = 0,
+    bool IncludeFinishedTouched = false) : IRequest<ServiceResult<ArchiveTasksResult>>;
 
 public class ArchiveTasksHandler : IRequestHandler<ArchiveTasksCommand, ServiceResult<ArchiveTasksResult>>
 {
@@ -66,7 +68,13 @@ public class ArchiveTasksHandler : IRequestHandler<ArchiveTasksCommand, ServiceR
 
         // A task and its QA task are kept or archived together: touched if either is.
         var touchedRoots = all.Where(c => c.TouchedSince).Select(c => c.ParentTaskId ?? c.Id).ToHashSet();
-        bool Kept(ArchiveCandidate c) => !cmd.IncludeTouched && touchedRoots.Contains(c.ParentTaskId ?? c.Id);
+        var finishedRoots = all.Where(c => c.ParentTaskId is null && c.Status == TaskStatus.Done).Select(c => c.Id).ToHashSet();
+        bool Kept(ArchiveCandidate c)
+        {
+            var root = c.ParentTaskId ?? c.Id;
+            if (cmd.IncludeTouched || !touchedRoots.Contains(root)) return false;
+            return !(cmd.IncludeFinishedTouched && finishedRoots.Contains(root));
+        }
 
         var selected = all.Where(c => !Kept(c)).ToList();
         var kept = all.Where(Kept).ToList();

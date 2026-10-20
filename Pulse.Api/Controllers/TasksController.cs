@@ -278,12 +278,14 @@ public class TasksController : ControllerBase
         bool DryRun = true,
         string? Reason = null,
         // Minutes from UTC of the local time the baseline day starts in (the admin's own); organizations are in different time zones.
-        int UtcOffsetMinutes = 0);
+        int UtcOffsetMinutes = 0,
+        bool IncludeFinishedTouched = false);
 
     /// <summary>Archives every task created before a baseline day so the system's working data starts fresh from it. Reversible; nothing is deleted.</summary>
     /// <remarks>
     /// DryRun defaults to true: send DryRun=false with a Reason to actually archive. Tasks in personal projects are never touched. A task that has had any
     /// activity since the baseline day began (history, comment, time logged) is kept unless IncludeTouched is set; a task and its QA task move together.
+    /// IncludeFinishedTouched archives finished (Done) tasks even when touched since, while open tasks touched since are still kept.
     /// </remarks>
     [HttpPost("archive")]
     [RequiresCapability(CapabilityRegistry.PmoOnly)]
@@ -294,7 +296,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> ArchiveTasks([FromBody] ArchiveTasksRequest request) =>
         (await _mediator.Send(new ArchiveTasksCommand(
             request.BaselineStart, request.ProjectIds, request.IncludeTouched, request.DryRun, request.Reason,
-            GetActorId(), GetIp(), GetRole(), request.UtcOffsetMinutes))).ToActionResult();
+            GetActorId(), GetIp(), GetRole(), request.UtcOffsetMinutes, request.IncludeFinishedTouched))).ToActionResult();
 
     /// <summary>Lists archived tasks, newest archived first.</summary>
     [HttpGet("archived")]
