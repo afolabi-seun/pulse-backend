@@ -287,6 +287,9 @@ internal static class WeeklyReportAssembler
         {
             var wStart = weekStart.AddDays(-7 * w);
             var wEnd = wStart.AddDays(6);
+            // A week that ended before the reporting start date is left out; one that straddles it counts only the days from it, labelled by that day.
+            if (thresholds.ReportingBaseline is { } baseline && wEnd < baseline) continue;
+            wStart = thresholds.FloorDate(wStart);
             var weekCheckIns = await checkIns.GetCheckInCountByDateRangeAsync(wStart, wEnd, ct);
             var checkedIn = teamEngCount == 0 ? 0 : weekCheckIns.Keys.Count(id => complianceEngineerIds.Contains(id) && weekCheckIns[id] > 0);
             var pct = teamEngCount == 0 ? 0 : (int)Math.Round((double)checkedIn / teamEngCount * 100);

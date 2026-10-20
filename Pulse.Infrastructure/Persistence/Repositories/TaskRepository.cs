@@ -597,7 +597,7 @@ public class TaskRepository : ITaskRepository
             .GroupBy(x =>
             {
                 var dow = (int)x.ChangedAt.DayOfWeek;
-                return DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyThroughputPoint(g.Key, g.Sum(x => x.Points)))
             .OrderBy(p => p.WeekOf)
@@ -637,12 +637,12 @@ public class TaskRepository : ITaskRepository
     }
 
     // Weeks run Monday to Sunday, like the delivered series.
-    private static IReadOnlyList<WeeklyEarnedPoint> WeeklyEarned(IEnumerable<(decimal Points, DateTime At)> credits) =>
+    private IReadOnlyList<WeeklyEarnedPoint> WeeklyEarned(IEnumerable<(decimal Points, DateTime At)> credits) =>
         credits
             .GroupBy(c =>
             {
                 var dow = (int)c.At.DayOfWeek;
-                return DateOnly.FromDateTime(c.At.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(c.At.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyEarnedPoint(g.Key, g.Sum(c => c.Points)))
             .OrderBy(p => p.WeekOf)
@@ -676,7 +676,7 @@ public class TaskRepository : ITaskRepository
             .GroupBy(x =>
             {
                 var dow = (int)x.ChangedAt.DayOfWeek;
-                return DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyThroughputPoint(g.Key, g.Sum(x => x.Points)))
             .OrderBy(p => p.WeekOf)
@@ -703,7 +703,7 @@ public class TaskRepository : ITaskRepository
             .GroupBy(x =>
             {
                 var dow = (int)x.ChangedAt.DayOfWeek;
-                return DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyThroughputPoint(g.Key, g.Sum(x => x.Points)))
             .OrderBy(p => p.WeekOf)

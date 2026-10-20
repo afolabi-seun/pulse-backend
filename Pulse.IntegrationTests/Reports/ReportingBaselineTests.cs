@@ -80,6 +80,35 @@ public class ReportingBaselineTests : IntegrationTestBase, IClassFixture<PulseWe
     }
 
     [Fact]
+    public async Task Check_in_compliance_weeks_before_the_baseline_are_left_out_and_a_straddling_week_starts_at_it()
+    {
+        // Compliance is reported for the last four weeks; with the baseline today, only the current week can show, and it is labelled by the baseline.
+        var pmoEmail = "bl4_pmo@pulse.io";
+        await SeedEngineerAsync(pmoEmail, Roles.HeadOfPmo);
+        var team = await SeedTeamAsync("Baseline compliance team");
+        var member = await SeedEngineerAsync("bl4_eng@pulse.io", Roles.Engineer);
+        await AssignEngineerToTeamAsync(member.Id, team.Id);
+        var pmo = await AuthenticatedClientAsync(pmoEmail);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        try
+        {
+            (await pmo.PutAsync("/api/v1/reports/baseline", Date(today))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var resp = await pmo.GetAsync("/api/v1/reports/pmo");
+            resp.StatusCode.Should().Be(HttpStatusCode.OK);
+            var report = (await resp.Content.ReadFromJsonAsync<ApiResponse<PmoReportDto>>(JsonOpts))!.Data!;
+
+            var weeks = report.CheckInCompliance.First(t => t.TeamId == team.Id).Weeks;
+            weeks.Should().ContainSingle();
+            weeks[0].WeekOf.Should().Be(today.ToString("yyyy-MM-dd"));
+        }
+        finally
+        {
+            await pmo.PutAsync("/api/v1/reports/baseline", Date(null)); // leave the shared server clean for other tests
+        }
+    }
+
+    [Fact]
     public async Task A_baseline_in_the_future_is_refused()
     {
         await SeedEngineerAsync("bl3_pmo@pulse.io", Roles.HeadOfPmo);
