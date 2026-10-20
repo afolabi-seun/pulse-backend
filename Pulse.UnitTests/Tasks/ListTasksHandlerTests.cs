@@ -54,7 +54,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, actorId, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(projectId)), default))
@@ -83,7 +83,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(projectId)), default))
@@ -110,7 +110,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), default))
@@ -137,7 +137,7 @@ public class ListTasksHandlerTests
 
         _tasks
             .Setup(r => r.ListAsync(null, null, null, null, null, null, 20, null,
-                false, null, null, null, null, null, false, null, false, null, null, default))
+                false, null, null, null, null, null, false, null, false, null, null, null, null, null, default))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(r => r.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), default))
@@ -195,7 +195,8 @@ public class ListTasksHandlerTests
                 It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<string?>(),
                 It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
                 It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(),
-                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects
             .Setup(p => p.GetPersonalProjectIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
@@ -235,7 +236,8 @@ public class ListTasksHandlerTests
                 It.IsAny<TaskType?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<string?>(),
                 It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
                 It.IsAny<IReadOnlyList<Guid>?>(), It.IsAny<Discipline?>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<Guid>?>(),
-                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IReadOnlyList<Pulse.Domain.Tasks.TaskStatus>?>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((new[] { task }, (string?)null));
         _projects.Setup(p => p.GetNamesByIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string>());

@@ -109,7 +109,9 @@ public class TaskRepository : ITaskRepository
         bool noSprint = false, string? title = null, IReadOnlyList<Guid>? departmentAssigneeIds = null,
         IReadOnlyList<Guid>? departmentSprintIds = null, IReadOnlyList<Guid>? departmentProjectIds = null,
         Domain.Tasks.Discipline? discipline = null, bool excludeDone = false, IReadOnlyList<Guid>? excludeAssigneeIds = null,
-        bool noAssignee = false, string? sortBy = null, string? sortDirection = null, CancellationToken ct = default)
+        bool noAssignee = false, string? sortBy = null, string? sortDirection = null,
+        IReadOnlyList<Domain.Tasks.TaskStatus>? statuses = null, DateOnly? dateFrom = null, DateOnly? dateTo = null,
+        CancellationToken ct = default)
     {
         var query = _db.Tasks.AsQueryable();
 
@@ -153,6 +155,24 @@ public class TaskRepository : ITaskRepository
                 (hasAssigneeFilter && t.AssigneeId != null && departmentAssigneeIds!.Contains(t.AssigneeId.Value)) ||
                 (hasSprintFilter   && t.AssigneeId == null && t.SprintId != null && departmentSprintIds!.Contains(t.SprintId.Value)));
         if (status.HasValue)     query = query.Where(t => t.Status == status.Value);
+        if (statuses is { Count: > 0 })
+            query = query.Where(t => statuses.Contains(t.Status));
+        // The date range reads a Done task by when it was completed and anything else by its due date; undated, unfinished work (Backlog) is never
+        // dropped by it. Only narrows the set: ordering and cursors below are untouched.
+        if (dateFrom.HasValue)
+        {
+            var from = dateFrom.Value;
+            query = query.Where(t => t.Status == Domain.Tasks.TaskStatus.Done
+                ? (t.ActualEndDate ?? t.DueDate) >= from
+                : (t.DueDate == null || t.DueDate >= from));
+        }
+        if (dateTo.HasValue)
+        {
+            var to = dateTo.Value;
+            query = query.Where(t => t.Status == Domain.Tasks.TaskStatus.Done
+                ? (t.ActualEndDate ?? t.DueDate) <= to
+                : (t.DueDate == null || t.DueDate <= to));
+        }
         if (taskType.HasValue)   query = query.Where(t => t.Type == taskType.Value);
         if (sprintId.HasValue)   query = query.Where(t => t.SprintId == sprintId.Value);
         if (noSprint)            query = query.Where(t => t.SprintId == null);
