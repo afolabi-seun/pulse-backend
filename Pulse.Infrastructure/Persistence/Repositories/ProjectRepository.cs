@@ -114,7 +114,7 @@ public class ProjectRepository : IProjectRepository
             .GroupBy(x =>
             {
                 var dow = (int)x.ChangedAt.DayOfWeek;
-                return DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(x.ChangedAt.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyThroughputPoint(g.Key, g.Sum(x => x.Points)))
             .OrderBy(p => p.WeekOf)
@@ -135,7 +135,7 @@ public class ProjectRepository : IProjectRepository
             .GroupBy(c =>
             {
                 var dow = (int)c.CreditedAt.DayOfWeek;
-                return DateOnly.FromDateTime(c.CreditedAt.AddDays(dow == 0 ? -6 : 1 - dow));
+                return _thresholds.FloorDate(DateOnly.FromDateTime(c.CreditedAt.AddDays(dow == 0 ? -6 : 1 - dow)));
             })
             .Select(g => new WeeklyEarnedPoint(g.Key, g.Sum(c => c.Points)))
             .OrderBy(p => p.WeekOf)

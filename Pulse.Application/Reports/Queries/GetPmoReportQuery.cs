@@ -280,10 +280,12 @@ public class GetPmoReportHandler : IRequestHandler<GetPmoReportQuery, ServiceRes
 
         // 10. Check-in Compliance (last 4 weeks) — each week's check-in counts only depend on the date
         //     range, not the team, so fetch each week once and reuse it across every team.
-        var complianceWeekStarts = Enumerable.Range(0, 4).Select(w => weekStart.AddDays(-7 * (3 - w))).ToList();
+        //     A week that ended before the reporting start date is left out, and one that straddles it counts only the days from it (labelled by that day).
+        var complianceWeekStarts = Enumerable.Range(0, 4).Select(w => weekStart.AddDays(-7 * (3 - w)))
+            .Where(w => _thresholds.ReportingBaseline is not { } baseline || w.AddDays(6) >= baseline).ToList();
         var checkInsByWeek = new List<IReadOnlyDictionary<Guid, int>>();
         foreach (var wStart in complianceWeekStarts)
-            checkInsByWeek.Add(await _checkIns.GetCheckInCountByDateRangeAsync(wStart, wStart.AddDays(6), ct));
+            checkInsByWeek.Add(await _checkIns.GetCheckInCountByDateRangeAsync(_thresholds.FloorDate(wStart), wStart.AddDays(6), ct));
 
         var compliance = new List<TeamComplianceDto>();
         var allTeamEngineers = allEngineers.Where(e => e.TeamId.HasValue && deliveryRoles.Contains(e.Role)).ToList();
@@ -301,7 +303,7 @@ public class GetPmoReportHandler : IRequestHandler<GetPmoReportQuery, ServiceRes
                 var weekCheckIns = checkInsByWeek[i];
                 var checkedIn = weekCheckIns.Keys.Count(id => teamEngIds.Contains(id) && weekCheckIns[id] > 0);
                 var pct = (int)Math.Round((double)checkedIn / teamEngCount * 100);
-                weekEntries.Add(new WeekComplianceDto(wStart.ToString("yyyy-MM-dd"), teamEngCount, checkedIn, pct));
+                weekEntries.Add(new WeekComplianceDto(_thresholds.FloorDate(wStart).ToString("yyyy-MM-dd"), teamEngCount, checkedIn, pct));
             }
             compliance.Add(new TeamComplianceDto(team.Id, team.Name, weekEntries));
         }

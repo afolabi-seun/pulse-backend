@@ -1,5 +1,6 @@
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Overwork;
 using Pulse.Application.Performance.Queries;
 using Pulse.Application.Projects;
 using Pulse.Domain.Engineers;
@@ -15,6 +16,7 @@ public class GetMyPerformanceHandlerTests
     private readonly Mock<ITaskRepository> _tasks = new();
     private readonly Mock<IEscalationEventRepository> _escalationEvents = new();
     private readonly Mock<ICheckInRepository> _checkIns = new();
+    private OverworkThresholds Thresholds { get; } = new();
 
     public GetMyPerformanceHandlerTests()
     {
@@ -30,7 +32,7 @@ public class GetMyPerformanceHandlerTests
     }
 
     private GetMyPerformanceHandler CreateHandler() =>
-        new(_engineers.Object, _tasks.Object, _escalationEvents.Object, _checkIns.Object);
+        new(_engineers.Object, _tasks.Object, _escalationEvents.Object, _checkIns.Object, Thresholds);
 
     [Fact]
     public async Task Returns_NOT_FOUND_when_engineer_missing()
@@ -55,6 +57,38 @@ public class GetMyPerformanceHandlerTests
         result.Data!.EngineerId.Should().Be(engineer.Id);
         result.Data!.DeliveredPoints.Should().Be(10);
     }
+
+    [Fact]
+    public async Task Measures_only_the_days_since_the_reporting_start_date()
+    {
+        // A 30-day window that reaches back past the reporting start date: what is expected of the engineer, and the check-in days they are
+        // measured against, cover only the days actually reported on — not the excluded days before it.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        Thresholds.ReportingBaseline = today.AddDays(-5);
+        var engineer = Engineer.Create("Dev", "dev@pulse.io", "pw", Roles.Engineer, 14, 14);
+        _engineers.Setup(r => r.GetByIdAsync(engineer.Id, default)).ReturnsAsync(engineer);
+
+        var result = await CreateHandler().Handle(new GetMyPerformanceQuery(engineer.Id, 30), default);
+
+        result.Data!.From.Should().Be(today.AddDays(-5));
+        result.Data.ExpectedPoints.Should().BeApproximately(5, 0.001);   // 14 points per 14 days, over 5 days
+        result.Data.ExpectedCheckInDays.Should().BeLessThanOrEqualTo(5);
+        _checkIns.Verify(c => c.GetCheckInCountByDateRangeAsync(today.AddDays(-5), today, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Leaves_the_window_alone_when_the_reporting_start_date_is_older_than_it()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        Thresholds.ReportingBaseline = today.AddDays(-90);
+        var engineer = Engineer.Create("Dev", "dev@pulse.io", "pw", Roles.Engineer, 14, 14);
+        _engineers.Setup(r => r.GetByIdAsync(engineer.Id, default)).ReturnsAsync(engineer);
+
+        var result = await CreateHandler().Handle(new GetMyPerformanceQuery(engineer.Id, 30), default);
+
+        result.Data!.From.Should().Be(today.AddDays(-30));
+        result.Data.ExpectedPoints.Should().BeApproximately(30, 0.001);
+    }
 }
 
 public class GetTeamPerformanceHandlerTests
@@ -64,6 +98,7 @@ public class GetTeamPerformanceHandlerTests
     private readonly Mock<IEscalationEventRepository> _escalationEvents = new();
     private readonly Mock<ICheckInRepository> _checkIns = new();
     private readonly Mock<IProjectAccessPolicy> _access = new();
+    private OverworkThresholds Thresholds { get; } = new();
 
     public GetTeamPerformanceHandlerTests()
     {
@@ -79,7 +114,7 @@ public class GetTeamPerformanceHandlerTests
     }
 
     private GetTeamPerformanceHandler CreateHandler() =>
-        new(_engineers.Object, _tasks.Object, _escalationEvents.Object, _checkIns.Object, _access.Object);
+        new(_engineers.Object, _tasks.Object, _escalationEvents.Object, _checkIns.Object, _access.Object, Thresholds);
 
     [Fact]
     public async Task Returns_FORBIDDEN_when_actor_cannot_access_team()
@@ -134,6 +169,25 @@ public class GetTeamPerformanceHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Select(d => d.EngineerId).Should().BeEquivalentTo([engineer.Id]);
+    }
+
+    [Fact]
+    public async Task Team_check_ins_and_expected_days_start_at_the_reporting_start_date()
+    {
+        var teamId = Guid.NewGuid();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        Thresholds.ReportingBaseline = today.AddDays(-5);
+        var engineer = Engineer.Create("Dev One", "one@pulse.io", "pw", Roles.Engineer, 14, 14);
+        _access
+            .Setup(a => a.CanAccessTeamAsync(teamId, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _engineers.Setup(r => r.ListWithWorkloadAsync(null, teamId, default)).ReturnsAsync(new[] { (engineer, 0, 0) });
+
+        var result = await CreateHandler().Handle(new GetTeamPerformanceQuery(teamId, null, Guid.NewGuid(), Roles.TeamLead, 30), default);
+
+        result.Data!.Single().From.Should().Be(today.AddDays(-5));
+        result.Data!.Single().ExpectedPoints.Should().BeApproximately(5, 0.001);
+        _checkIns.Verify(c => c.GetCheckInCountByDateRangeAsync(today.AddDays(-5), today, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

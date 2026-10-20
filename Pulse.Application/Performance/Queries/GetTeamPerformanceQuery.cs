@@ -1,6 +1,7 @@
 using Pulse.Application.Auth;
 using Pulse.Application.Common;
 using Pulse.Application.Common.Interfaces;
+using Pulse.Application.Overwork;
 using Pulse.Domain.Engineers;
 using MediatR;
 
@@ -21,16 +22,18 @@ public class GetTeamPerformanceHandler : IRequestHandler<GetTeamPerformanceQuery
     private readonly ITaskRepository _tasks;
     private readonly IEscalationEventRepository _escalationEvents;
     private readonly ICheckInRepository _checkIns;
+    private readonly OverworkThresholds _thresholds;
     private readonly IProjectAccessPolicy _access;
 
     public GetTeamPerformanceHandler(
         IEngineerRepository engineers, ITaskRepository tasks, IEscalationEventRepository escalationEvents,
-        ICheckInRepository checkIns, IProjectAccessPolicy access)
+        ICheckInRepository checkIns, IProjectAccessPolicy access, OverworkThresholds thresholds)
     {
         _engineers = engineers;
         _tasks = tasks;
         _escalationEvents = escalationEvents;
         _checkIns = checkIns;
+        _thresholds = thresholds;
         _access = access;
     }
 
@@ -49,7 +52,9 @@ public class GetTeamPerformanceHandler : IRequestHandler<GetTeamPerformanceQuery
 
         var to = DateTime.UtcNow;
         var from = to.AddDays(-Math.Max(query.Days, 1));
-        var fromDate = DateOnly.FromDateTime(from);
+        // The window starts no earlier than the reporting start date: what is expected of someone (points, check-in days) and the check-ins counted
+        // are measured over the days that are actually reported on, not the full 30 or 90 days back that reach into earlier, excluded records.
+        var fromDate = _thresholds.FloorDate(DateOnly.FromDateTime(from));
         var toDate = DateOnly.FromDateTime(to);
 
         var checkInCounts = await _checkIns.GetCheckInCountByDateRangeAsync(fromDate, toDate, ct);
